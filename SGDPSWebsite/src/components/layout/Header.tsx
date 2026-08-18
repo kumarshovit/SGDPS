@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../../hooks/useAppDispatch';
 import { useAppSelector } from '../../hooks/useAppSelector';
-import { logout } from '../../features/auth/slices/authSlice';
+import { logout, updateUser } from '../../features/auth/slices/authSlice';
+import { useUpdateUserNameMutation } from '../../features/users/api/userApiSlice';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import {
   Menu,
@@ -16,6 +17,8 @@ import {
   Tag,
   X,
   CheckCircle2,
+  Pencil,
+  User as UserIcon,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
@@ -43,9 +46,17 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const user = useAppSelector((state) => state.auth.user);
+  const [updateUserName, { isLoading: isUpdatingName }] = useUpdateUserNameMutation();
 
-  // Settings Modal State
+  // Settings & Profile Modal State
   const [showSettings, setShowSettings] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showEditProfileModal, setShowEditProfileModal] = useState(false);
+  const [profileFirstName, setProfileFirstName] = useState('');
+  const [profileLastName, setProfileLastName] = useState('');
+  const [profileErrMsg, setProfileErrMsg] = useState('');
+  const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
+
   const [deletePin, setDeletePin] = useState(getDeletePin());
   const [floorsPerBlock, setFloorsPerBlock] = useState<number>(getGlobalFloorsPerBlock());
   const [flatsPerFloor, setFlatsPerFloor] = useState<number>(getGlobalFlatsPerFloor());
@@ -174,6 +185,36 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     }
   };
 
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !profileFirstName.trim()) return;
+    setProfileErrMsg('');
+    setProfileSuccessMsg('');
+
+    try {
+      await updateUserName({
+        id: user.id,
+        firstName: profileFirstName.trim(),
+        lastName: profileLastName.trim(),
+      }).unwrap();
+
+      dispatch(
+        updateUser({
+          firstName: profileFirstName.trim(),
+          lastName: profileLastName.trim(),
+        })
+      );
+
+      setProfileSuccessMsg('Profile name updated successfully!');
+      setTimeout(() => {
+        setShowEditProfileModal(false);
+        setProfileSuccessMsg('');
+      }, 1000);
+    } catch (err: any) {
+      setProfileErrMsg(err?.data?.detail || 'Failed to update profile name');
+    }
+  };
+
   return (
     <>
       <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between px-4 lg:px-8 glass-header">
@@ -216,20 +257,33 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           {/* User Profile */}
           {user ? (
             <div className="flex items-center gap-2 pl-2 border-l border-cream-border dark:border-charcoal-700">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-maroon-800 to-saffron-600 text-white font-bold text-xs shadow-gold">
-                {user.firstName[0]}
-                {user.lastName?.[0] || ''}
-              </div>
-              <div className="hidden xl:flex flex-col text-left">
-                <span className="text-xs font-bold text-charcoal-900 dark:text-cream-50 leading-tight">
-                  {user.firstName} {user.lastName}
-                </span>
-                <span className="text-[10px] text-saffron-600 dark:text-gold-400 font-bold">
-                  {user.roles?.[0] || 'Admin'}
-                </span>
-              </div>
               <button
-                onClick={handleLogout}
+                onClick={() => {
+                  setProfileFirstName(user.firstName || '');
+                  setProfileLastName(user.lastName || '');
+                  setProfileErrMsg('');
+                  setProfileSuccessMsg('');
+                  setShowEditProfileModal(true);
+                }}
+                className="flex items-center gap-2 group text-left cursor-pointer p-1 rounded-xl hover:bg-cream-100 dark:hover:bg-charcoal-700/60 transition-colors"
+                title="Click to edit profile name"
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-maroon-800 to-saffron-600 text-white font-bold text-xs shadow-gold group-hover:scale-105 transition-transform">
+                  {user.firstName[0]}
+                  {user.lastName?.[0] || ''}
+                </div>
+                <div className="hidden xl:flex flex-col text-left">
+                  <span className="text-xs font-bold text-charcoal-900 dark:text-cream-50 leading-tight flex items-center gap-1">
+                    {user.firstName} {user.lastName}
+                    <Pencil size={11} className="text-charcoal-400 group-hover:text-gold-600 transition-colors" />
+                  </span>
+                  <span className="text-[10px] text-saffron-600 dark:text-gold-400 font-bold">
+                    {user.roles?.[0] || 'Admin'}
+                  </span>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowLogoutConfirm(true)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-charcoal-400 hover:text-maroon-700 dark:hover:text-rose-400 hover:bg-maroon-50 dark:hover:bg-maroon-950/50 transition-colors ml-1"
                 title="Logout"
               >
@@ -464,6 +518,118 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 leftIcon={<Sparkles size={14} />}
               >
                 Save Settings
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutConfirm && (
+        <Modal
+          isOpen={showLogoutConfirm}
+          onClose={() => setShowLogoutConfirm(false)}
+          title="Confirm Logout"
+          subtitle="Are you sure you want to sign out?"
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-800 dark:text-rose-300">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-md">
+                <LogOut size={18} />
+              </div>
+              <p className="text-xs font-medium leading-relaxed">
+                You are about to log out from <span className="font-bold text-charcoal-900 dark:text-cream-50">{user?.firstName} {user?.lastName || ''}</span> ({user?.roles?.[0] || 'Admin'}). You will need to sign in again to access the portal.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-cream-100 dark:border-charcoal-700">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                leftIcon={<LogOut size={15} />}
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  handleLogout();
+                }}
+              >
+                Yes, Sign Out
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit Admin Profile Modal */}
+      {showEditProfileModal && user && (
+        <Modal
+          isOpen={showEditProfileModal}
+          onClose={() => {
+            setShowEditProfileModal(false);
+            setProfileErrMsg('');
+            setProfileSuccessMsg('');
+          }}
+          title="Edit Admin Profile"
+          subtitle={`Update name for login ID: ${user.email}`}
+          maxWidth="sm"
+        >
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="First Name *"
+                required
+                value={profileFirstName}
+                onChange={(e) => setProfileFirstName(e.target.value)}
+                placeholder="First Name"
+                icon={<UserIcon size={15} />}
+                autoFocus
+              />
+              <Input
+                label="Last Name"
+                value={profileLastName}
+                onChange={(e) => setProfileLastName(e.target.value)}
+                placeholder="Last Name"
+              />
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-[11px] text-gold-800 dark:text-gold-300">
+              👤 Updating your name will reflect immediately across your admin profile badge and society ledgers.
+            </div>
+
+            {profileErrMsg && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400">
+                {profileErrMsg}
+              </div>
+            )}
+
+            {profileSuccessMsg && (
+              <div className="p-2.5 rounded-xl bg-leaf-500/10 border border-leaf-500/20 text-xs font-bold text-leaf-700 dark:text-leaf-300 flex items-center gap-1.5">
+                <CheckCircle2 size={14} />
+                {profileSuccessMsg}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setShowEditProfileModal(false);
+                  setProfileErrMsg('');
+                  setProfileSuccessMsg('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" isLoading={isUpdatingName}>
+                Save Changes
               </Button>
             </div>
           </form>

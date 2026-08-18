@@ -2,7 +2,10 @@ import React, { useState, useMemo } from 'react';
 import {
   useGetCollectorsQuery,
   useCreateCollectorMutation,
+  useUpdateUserNameMutation,
+  useUpdateUserStatusMutation,
 } from '../api/userApiSlice';
+import { Collector } from '../types';
 import { formatCurrency, formatDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
@@ -21,6 +24,11 @@ import {
   IndianRupee,
   Receipt,
   CheckCircle2,
+  XCircle,
+  Pencil,
+  Power,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 
 export const UserManagementPage: React.FC = () => {
@@ -30,9 +38,24 @@ export const UserManagementPage: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('Collector@123');
+  const [createErrMsg, setCreateErrMsg] = useState('');
+
+  // Edit Collector Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingCollector, setEditingCollector] = useState<Collector | null>(null);
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editErrMsg, setEditErrMsg] = useState('');
+
+  // Status Confirmation Modal State
+  const [isStatusConfirmOpen, setIsStatusConfirmOpen] = useState(false);
+  const [statusConfirmCollector, setStatusConfirmCollector] = useState<Collector | null>(null);
+  const [statusErrMsg, setStatusErrMsg] = useState('');
 
   const { data: collectors = [], isLoading } = useGetCollectorsQuery();
   const [createCollector, { isLoading: isCreating }] = useCreateCollectorMutation();
+  const [updateUserName, { isLoading: isUpdatingName }] = useUpdateUserNameMutation();
+  const [updateUserStatus, { isLoading: isUpdatingStatus }] = useUpdateUserStatusMutation();
 
   const filteredCollectors = useMemo(() => {
     if (!searchQuery.trim()) return collectors;
@@ -54,6 +77,7 @@ export const UserManagementPage: React.FC = () => {
   const handleCreateCollector = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !firstName.trim()) return;
+    setCreateErrMsg('');
 
     try {
       await createCollector({
@@ -69,7 +93,57 @@ export const UserManagementPage: React.FC = () => {
       setEmail('');
       setPassword('Collector@123');
     } catch (err: any) {
-      alert(err?.data?.detail || 'Failed to create collector account');
+      setCreateErrMsg(err?.data?.detail || 'Failed to create collector account');
+    }
+  };
+
+  const handleOpenEditModal = (c: Collector) => {
+    setEditingCollector(c);
+    setEditFirstName(c.firstName || '');
+    setEditLastName(c.lastName || '');
+    setEditErrMsg('');
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdateCollectorName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCollector || !editFirstName.trim()) return;
+    setEditErrMsg('');
+
+    try {
+      await updateUserName({
+        id: editingCollector.id,
+        firstName: editFirstName.trim(),
+        lastName: editLastName.trim(),
+      }).unwrap();
+
+      setIsEditModalOpen(false);
+      setEditingCollector(null);
+    } catch (err: any) {
+      setEditErrMsg(err?.data?.detail || 'Failed to update collector name');
+    }
+  };
+
+  const handleOpenStatusConfirm = (c: Collector) => {
+    setStatusConfirmCollector(c);
+    setStatusErrMsg('');
+    setIsStatusConfirmOpen(true);
+  };
+
+  const handleConfirmStatusToggle = async () => {
+    if (!statusConfirmCollector) return;
+    setStatusErrMsg('');
+
+    try {
+      await updateUserStatus({
+        id: statusConfirmCollector.id,
+        isActive: !statusConfirmCollector.isActive,
+      }).unwrap();
+
+      setIsStatusConfirmOpen(false);
+      setStatusConfirmCollector(null);
+    } catch (err: any) {
+      setStatusErrMsg(err?.data?.detail || 'Failed to update collector status');
     }
   };
 
@@ -166,23 +240,21 @@ export const UserManagementPage: React.FC = () => {
               <tr>
                 <th className="py-3.5 px-4">Collector Profile</th>
                 <th className="py-3.5 px-4">Login ID / Email</th>
-                <th className="py-3.5 px-4">Access Role</th>
-                <th className="py-3.5 px-4">Account Status</th>
                 <th className="py-3.5 px-4">Total Collected (₹)</th>
-                <th className="py-3.5 px-4">Receipts Count</th>
-                <th className="py-3.5 px-4">Registered Date</th>
+                <th className="py-3.5 px-4 text-center">Status</th>
+                <th className="py-3.5 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-cream-border dark:divide-charcoal-700/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-charcoal-400">
+                  <td colSpan={5} className="py-8 text-center text-charcoal-400">
                     Loading collectors information...
                   </td>
                 </tr>
               ) : filteredCollectors.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-charcoal-400">
+                  <td colSpan={5} className="py-8 text-center text-charcoal-400">
                     No field collectors found matching criteria. Click <strong>Register Collector</strong> to add one.
                   </td>
                 </tr>
@@ -204,7 +276,7 @@ export const UserManagementPage: React.FC = () => {
                             {c.fullName || `${c.firstName} ${c.lastName || ''}`.trim()}
                           </div>
                           <div className="text-[10px] text-charcoal-400 font-mono">
-                            ID #{c.id}
+                            ID #{c.id} · {c.createdOn ? formatDateTime(c.createdOn) : '—'}
                           </div>
                         </div>
                       </div>
@@ -215,37 +287,59 @@ export const UserManagementPage: React.FC = () => {
                       {c.email}
                     </td>
 
-                    {/* Access Role */}
-                    <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center gap-1 text-xs font-bold text-saffron-700 dark:text-gold-400 bg-saffron-50 dark:bg-saffron-950/40 px-2 py-0.5 rounded-lg border border-saffron-500/20">
-                        <Smartphone size={12} />
-                        Field Collector
-                      </span>
-                    </td>
-
-                    {/* Status */}
-                    <td className="py-3.5 px-4">
-                      <Badge variant={c.isActive ? 'success' : 'danger'}>
-                        {c.isActive ? '● Active' : 'Inactive'}
-                      </Badge>
-                    </td>
-
                     {/* Total Collected */}
                     <td className="py-3.5 px-4 font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
                       {formatCurrency(c.totalCollected || 0)}
                     </td>
 
-                    {/* Collections Count */}
-                    <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center gap-1 font-bold text-charcoal-800 dark:text-cream-100 bg-cream-100 dark:bg-charcoal-900 px-2.5 py-1 rounded-lg">
-                        <Receipt size={13} className="text-gold-600" />
-                        {c.collectionsCount || 0} entries
-                      </span>
+                    {/* Status Badge */}
+                    <td className="py-3.5 px-4 text-center">
+                      <button
+                        onClick={() => handleOpenStatusConfirm(c)}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-all border ${
+                          c.isActive
+                            ? 'bg-leaf-500/15 border-leaf-500/30 text-leaf-700 dark:text-leaf-300 hover:bg-leaf-500/25'
+                            : 'bg-charcoal-500/15 border-charcoal-500/30 text-charcoal-600 dark:text-charcoal-400 hover:bg-charcoal-500/25'
+                        }`}
+                        title={c.isActive ? 'Click to Deactivate' : 'Click to Activate'}
+                      >
+                        {c.isActive ? (
+                          <>
+                            <CheckCircle2 size={12} className="text-leaf-600" />
+                            Active
+                          </>
+                        ) : (
+                          <>
+                            <XCircle size={12} className="text-charcoal-400" />
+                            Inactive
+                          </>
+                        )}
+                      </button>
                     </td>
 
-                    {/* Registered Date */}
-                    <td className="py-3.5 px-4 text-charcoal-500 dark:text-charcoal-400 text-xs">
-                      {c.createdOn ? formatDateTime(c.createdOn) : '—'}
+                    {/* Actions: Edit Name & Toggle */}
+                    <td className="py-3.5 px-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleOpenEditModal(c)}
+                          className="p-1.5 rounded-lg border border-gold-500/30 bg-gold-500/10 text-gold-700 dark:text-gold-300 hover:bg-gold-500/20 transition-colors"
+                          title="Edit Collector Name"
+                        >
+                          <Pencil size={14} />
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenStatusConfirm(c)}
+                          className={`p-1.5 rounded-lg border transition-colors ${
+                            c.isActive
+                              ? 'border-maroon-500/30 bg-maroon-500/10 text-maroon-700 dark:text-rose-400 hover:bg-maroon-500/20'
+                              : 'border-leaf-500/30 bg-leaf-500/10 text-leaf-700 dark:text-leaf-300 hover:bg-leaf-500/20'
+                          }`}
+                          title={c.isActive ? 'Deactivate Collector' : 'Activate Collector'}
+                        >
+                          {c.isActive ? <UserX size={14} /> : <UserCheck size={14} />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -255,11 +349,157 @@ export const UserManagementPage: React.FC = () => {
         </div>
       </GlassCard>
 
+      {/* Edit Collector Name Modal */}
+      {isEditModalOpen && editingCollector && (
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingCollector(null);
+            setEditErrMsg('');
+          }}
+          title="Edit Collector Name"
+          subtitle={`Update name for login ID: ${editingCollector.email}`}
+          maxWidth="sm"
+        >
+          <form onSubmit={handleUpdateCollectorName} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="First Name *"
+                required
+                value={editFirstName}
+                onChange={(e) => setEditFirstName(e.target.value)}
+                placeholder="Rahul"
+                icon={<User size={15} />}
+                autoFocus
+              />
+              <Input
+                label="Last Name"
+                value={editLastName}
+                onChange={(e) => setEditLastName(e.target.value)}
+                placeholder="Sharma"
+              />
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-[11px] text-gold-800 dark:text-gold-300">
+              💡 Updating the collector's name will update their profile across mobile receipts and collection attributions.
+            </div>
+
+            {editErrMsg && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400">
+                {editErrMsg}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingCollector(null);
+                  setEditErrMsg('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" isLoading={isUpdatingName}>
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Status Confirmation Modal */}
+      {isStatusConfirmOpen && statusConfirmCollector && (
+        <Modal
+          isOpen={isStatusConfirmOpen}
+          onClose={() => {
+            setIsStatusConfirmOpen(false);
+            setStatusConfirmCollector(null);
+            setStatusErrMsg('');
+          }}
+          title={statusConfirmCollector.isActive ? 'Deactivate Collector Access' : 'Activate Collector Access'}
+          subtitle={`Manage mobile collection login for ${statusConfirmCollector.email}`}
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <div
+              className={`flex items-center gap-3.5 p-3.5 rounded-xl border ${
+                statusConfirmCollector.isActive
+                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'
+                  : 'bg-leaf-500/10 border-leaf-500/20 text-leaf-800 dark:text-leaf-300'
+              }`}
+            >
+              <div
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-md ${
+                  statusConfirmCollector.isActive ? 'bg-rose-600' : 'bg-leaf-600'
+                }`}
+              >
+                {statusConfirmCollector.isActive ? <UserX size={18} /> : <UserCheck size={18} />}
+              </div>
+              <p className="text-xs font-medium leading-relaxed">
+                {statusConfirmCollector.isActive ? (
+                  <>
+                    Are you sure you want to <strong>deactivate</strong> mobile app access for{' '}
+                    <strong className="text-charcoal-900 dark:text-cream-50">
+                      {statusConfirmCollector.fullName || statusConfirmCollector.firstName}
+                    </strong>
+                    ? They will not be able to log in or record field collections.
+                  </>
+                ) : (
+                  <>
+                    Activate mobile collection app access for{' '}
+                    <strong className="text-charcoal-900 dark:text-cream-50">
+                      {statusConfirmCollector.fullName || statusConfirmCollector.firstName}
+                    </strong>
+                    ? They will be able to log in and record collections on the SGDPS mobile app.
+                  </>
+                )}
+              </p>
+            </div>
+
+            {statusErrMsg && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400">
+                {statusErrMsg}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-cream-100 dark:border-charcoal-700">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsStatusConfirmOpen(false);
+                  setStatusConfirmCollector(null);
+                  setStatusErrMsg('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant={statusConfirmCollector.isActive ? 'danger' : 'primary'}
+                isLoading={isUpdatingStatus}
+                leftIcon={statusConfirmCollector.isActive ? <UserX size={15} /> : <UserCheck size={15} />}
+                onClick={handleConfirmStatusToggle}
+              >
+                {statusConfirmCollector.isActive ? 'Yes, Deactivate' : 'Yes, Activate'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Register Collector Modal */}
       {isModalOpen && (
         <Modal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false);
+            setCreateErrMsg('');
+          }}
           title="Register Field Collector"
           subtitle="Generate login credentials for the mobile collection app"
         >
@@ -305,8 +545,21 @@ export const UserManagementPage: React.FC = () => {
               📱 This account will be able to log in to the <strong>SGDPS Mobile App</strong> to record collections and print digital receipts.
             </div>
 
+            {createErrMsg && (
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-700 dark:text-rose-400">
+                {createErrMsg}
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
-              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setCreateErrMsg('');
+                }}
+              >
                 Cancel
               </Button>
               <Button type="submit" variant="primary" isLoading={isCreating} rightIcon={<Plus size={15} />}>

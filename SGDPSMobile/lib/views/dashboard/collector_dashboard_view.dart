@@ -63,11 +63,50 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
             icon: const Icon(Icons.logout, color: AppColors.gold),
             tooltip: 'Logout',
             onPressed: () async {
-              await auth.logout();
-              if (mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (_) => const LoginView()),
-                );
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: AppColors.creamCard,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.logout, color: AppColors.maroon, size: 22),
+                      SizedBox(width: 8),
+                      Text('Confirm Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.ink)),
+                    ],
+                  ),
+                  content: const Text(
+                    'Are you sure you want to sign out of the SGDPS Collector app?',
+                    style: TextStyle(color: AppColors.inkMuted, fontSize: 14),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Cancel', style: TextStyle(color: AppColors.inkLight, fontWeight: FontWeight.bold)),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.maroon,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Logout', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true) {
+                await auth.logout();
+                if (mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const LoginView()),
+                  );
+                }
               }
             },
           ),

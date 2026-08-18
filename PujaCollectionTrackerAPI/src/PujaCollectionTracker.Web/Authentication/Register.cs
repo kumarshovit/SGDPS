@@ -25,14 +25,14 @@ public class Register(IMediator mediator, ILogger<Register> _logger)
     Summary(s =>
     {
       s.Summary = "Register a new user";
-      s.Description = "Creates a new user account and assigns the selected role. Self-registration is allowed for Admin, TeamManager, and Player.";
+      s.Description = "Creates a new user account and assigns the selected role. Registration is allowed for Admin and Collector roles.";
       s.ExampleRequest = new RegisterUserRequest
       {
         FirstName = "John",
         LastName = "Doe",
-        Email = "john.doe@example.com",
+        Email = "admin@sgdps.com",
         Password = "SecurePass123!",
-        Role = "Player"
+        Role = "Admin"
       };
       s.ResponseExamples[201] = new RegisterUserResponse(1);
       s.Responses[201] = "User registered successfully";
@@ -134,8 +134,8 @@ public class RegisterUserValidator : Validator<RegisterUserRequest>
     RuleFor(x => x.Role)
       .NotEmpty()
       .WithMessage("Role selection is required.")
-      .Must(role => new[] { "TeamManager", "Player" }.Contains(role, StringComparer.OrdinalIgnoreCase))
-      .WithMessage("Invalid role selection. You can only self-register as TeamManager or Player.");
+      .Must(role => new[] { "Admin", "Collector" }.Contains(role, StringComparer.OrdinalIgnoreCase))
+      .WithMessage("Invalid role selection. You can only register as Admin or Collector.");
   }
 }
 

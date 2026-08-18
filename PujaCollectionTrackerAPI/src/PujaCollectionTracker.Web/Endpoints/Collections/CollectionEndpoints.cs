@@ -240,6 +240,26 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
     var receiptDateStr = collectionTime.AddHours(5.5).ToString("yyyyMMdd");
     var receiptNum = $"REC-{receiptDateStr}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
 
+    var collectorUserId = req.CollectedByUserId?.Trim();
+    var collectorName = req.CollectedByName?.Trim() ?? "Admin";
+
+    if (string.IsNullOrWhiteSpace(collectorUserId) && !string.IsNullOrWhiteSpace(collectorName))
+    {
+      var matchedUser = await db.Users.FirstOrDefaultAsync(u =>
+        u.Email.ToLower() == collectorName.ToLower() ||
+        (u.FirstName + " " + u.LastName).Trim().ToLower() == collectorName.ToLower() ||
+        u.FirstName.ToLower() == collectorName.ToLower(), ct);
+
+      if (matchedUser != null)
+      {
+        collectorUserId = matchedUser.Id.Value.ToString();
+      }
+      else
+      {
+        collectorUserId = "1";
+      }
+    }
+
     var collection = new PaymentCollection
     {
       Type = type,
@@ -256,8 +276,8 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
       CollectionDateTime = collectionTime,
       Latitude = req.Latitude,
       Longitude = req.Longitude,
-      CollectedByUserId = req.CollectedByUserId ?? "collector_1",
-      CollectedByName = req.CollectedByName ?? "Collector",
+      CollectedByUserId = collectorUserId ?? "1",
+      CollectedByName = collectorName,
       Remarks = req.Remarks,
       CreatedAt = now
     };

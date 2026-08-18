@@ -19,7 +19,6 @@ import {
   FileSpreadsheet,
   Trash2,
   Tag,
-  Eye,
   Download,
   UploadCloud,
   X,
@@ -48,7 +47,6 @@ export const ExpensesPage: React.FC = () => {
   const [filterCategory, setFilterCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [previewExpense, setPreviewExpense] = useState<Expense | null>(null);
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
 
   // Form State
@@ -302,43 +300,25 @@ export const ExpensesPage: React.FC = () => {
                       -{formatCurrency(exp.amount)}
                     </td>
 
-                    {/* Receipt Status & Quick View */}
+                    {/* Receipt Status & Direct Download */}
                     <td className="py-3.5 px-3 text-center">
                       {exp.billAttachmentUrl ? (
                         <button
-                          onClick={() => setPreviewExpense(exp)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gold-500/15 border border-gold-500/30 text-gold-700 dark:text-gold-300 font-bold text-[11px] hover:bg-gold-500/25 transition-all"
-                          title="View Receipt"
+                          onClick={() => handleDownloadReceipt(exp)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-leaf-500/15 border border-leaf-500/30 text-leaf-700 dark:text-leaf-300 font-bold text-xs hover:bg-leaf-500/25 transition-all"
+                          title="Download Receipt"
                         >
-                          <Receipt size={12} />
-                          Bill
+                          <Download size={12} />
+                          Download
                         </button>
                       ) : (
-                        <span className="text-charcoal-400 text-[11px] italic">None</span>
+                        <span className="text-charcoal-400 text-xs italic">None</span>
                       )}
                     </td>
 
                     {/* Action Column */}
                     <td className="py-3.5 px-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
-                        {exp.billAttachmentUrl && (
-                          <>
-                            <button
-                              onClick={() => setPreviewExpense(exp)}
-                              className="p-1 rounded-lg text-charcoal-500 hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
-                              title="View Receipt"
-                            >
-                              <Eye size={15} />
-                            </button>
-                            <button
-                              onClick={() => handleDownloadReceipt(exp)}
-                              className="p-1 rounded-lg text-charcoal-500 hover:text-leaf-600 dark:hover:text-leaf-400 transition-colors"
-                              title="Download Receipt"
-                            >
-                              <Download size={15} />
-                            </button>
-                          </>
-                        )}
                         <button
                           onClick={() => setExpenseToDelete(exp)}
                           className="p-1 rounded-lg text-charcoal-400 hover:text-maroon-700 dark:hover:text-rose-400 transition-colors"
@@ -418,7 +398,7 @@ export const ExpensesPage: React.FC = () => {
               label="Bill No / Remarks (Optional)"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
-              placeholder="Voucher or invoice reference"
+              placeholder="Bill or invoice reference"
             />
 
             {/* Bill / Receipt Image Upload from Local System */}
@@ -482,58 +462,6 @@ export const ExpensesPage: React.FC = () => {
               </Button>
             </div>
           </form>
-        </Modal>
-      )}
-
-      {/* Bill / Receipt Preview Modal */}
-      {previewExpense && (
-        <Modal
-          isOpen={!!previewExpense}
-          onClose={() => setPreviewExpense(null)}
-          title={`Bill Receipt: ${previewExpense.category}`}
-          subtitle={`Amount: ${formatCurrency(previewExpense.amount)} · ${formatDateTime(previewExpense.expenseDate)}`}
-        >
-          <div className="space-y-4">
-            <div className="max-h-[65vh] overflow-auto rounded-2xl border border-cream-border dark:border-charcoal-700 bg-cream-50 dark:bg-charcoal-900 p-2 flex items-center justify-center">
-              {previewExpense.billAttachmentUrl ? (
-                <img
-                  src={previewExpense.billAttachmentUrl}
-                  alt={`Bill receipt for ${previewExpense.description}`}
-                  className="max-h-[60vh] w-auto rounded-xl object-contain shadow-md"
-                />
-              ) : (
-                <div className="text-xs text-charcoal-400 py-12 text-center">
-                  No receipt image available.
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-cream-100 dark:border-charcoal-700">
-              <div className="text-xs text-charcoal-600 dark:text-charcoal-300">
-                <strong>Vendor:</strong> {previewExpense.paidToVendor || '—'} · <strong>Mode:</strong> {previewExpense.paymentMode}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={<Download size={14} />}
-                  onClick={() => handleDownloadReceipt(previewExpense)}
-                >
-                  Download Receipt
-                </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setPreviewExpense(null)}
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
         </Modal>
       )}
 

@@ -63,6 +63,7 @@ class CollectionProvider extends ChangeNotifier {
     required double amount,
     required String mode,
     required String collectorName,
+    String? collectorUserId,
     String? referenceNo,
     String? remarks,
   }) async {
@@ -86,6 +87,7 @@ class CollectionProvider extends ChangeNotifier {
         'transactionReference': referenceNo,
         'latitude': position?.latitude,
         'longitude': position?.longitude,
+        'collectedByUserId': collectorUserId,
         'collectedByName': collectorName,
         'remarks': remarks,
         'collectionDateTime': DateTime.now().toUtc().toIso8601String(),

@@ -151,6 +151,14 @@ export const AddEntryPage: React.FC = () => {
         collectionIso = entryDate.toISOString();
       }
 
+      const matchedCollector = collectors.find(
+        (c) =>
+          c.fullName === collectedByName ||
+          `${c.firstName} ${c.lastName || ''}`.trim() === collectedByName ||
+          c.firstName === collectedByName ||
+          c.email === collectedByName
+      );
+
       const result = await createCollection({
         type: entryType,
         flatId: matchedFlat?.id,
@@ -162,6 +170,7 @@ export const AddEntryPage: React.FC = () => {
         amount: amt,
         mode: paymentMode,
         transactionReference: referenceNo.trim() || undefined,
+        collectedByUserId: matchedCollector ? String(matchedCollector.id) : undefined,
         collectedByName: collectedByName,
         remarks: remarks.trim() || undefined,
         collectionDateTime: collectionIso,

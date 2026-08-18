@@ -182,6 +182,14 @@ export const BlockGridPage: React.FC = () => {
         (f) => f.flatNumber === flatNumStr || f.flatNumber === String(selectedCell.flat)
       );
 
+      const matchedCollector = collectors.find(
+        (c) =>
+          c.fullName === collectorName ||
+          `${c.firstName} ${c.lastName || ''}`.trim() === collectorName ||
+          c.firstName === collectorName ||
+          c.email === collectorName
+      );
+
       await createCollection({
         type: 'ResidentBlock',
         flatId: matched?.id,
@@ -191,6 +199,7 @@ export const BlockGridPage: React.FC = () => {
         donorResidentName: residentName.trim() || matched?.ownerName || undefined,
         amount: amt,
         mode: paymentMode,
+        collectedByUserId: matchedCollector ? String(matchedCollector.id) : undefined,
         collectedByName: collectorName,
         collectionDateTime: new Date().toISOString(),
       }).unwrap();

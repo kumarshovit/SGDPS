@@ -3,6 +3,11 @@ export const formatCurrency = (amount: number | undefined | null): string => {
   return `₹${Math.round(amount).toLocaleString('en-IN')}`;
 };
 
+export const formatPdfCurrency = (amount: number | undefined | null): string => {
+  if (amount === undefined || amount === null || isNaN(amount)) return 'Rs. 0';
+  return `Rs. ${Math.round(amount).toLocaleString('en-IN')}`;
+};
+
 export const parseDateTime = (dateStr: string | Date | undefined | null): Date | null => {
   if (!dateStr) return null;
   if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? null : dateStr;
