@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCreateCollectionMutation } from '../api/collectionApiSlice';
 import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
@@ -23,20 +23,12 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { PaymentMode } from '../types';
-
-const DEFAULT_CATEGORIES = [
-  'Sponsorship - Pratima',
-  'Sponsorship - Decoration & Flowers',
-  'Sponsorship - Bhog & Prasad',
-  'Sponsorship - Bisarjan & Procession',
-  'Sponsorship - Banners & Lighting',
-  'Stall / Food Court Collection',
-  'Cultural & Stage Sponsor',
-  'Mata Ki Chowki Donation',
-  'Anandomela Stall',
-  'Interest Earned',
-  'General Puja Donation',
-];
+import {
+  getSponsorshipCategories,
+  getActiveBlocks,
+  getGlobalFloorsPerBlock,
+  getGlobalFlatsPerFloor,
+} from '../../../utils/settingsHelper';
 
 const QUICK_AMOUNTS = [1000, 2100, 2500, 5000, 11000, 21000];
 
@@ -46,7 +38,8 @@ export const AddEntryPage: React.FC = () => {
   const [block, setBlock] = useState('A-Block');
   const [floor, setFloor] = useState(1);
   const [flat, setFlat] = useState(1);
-  const [category, setCategory] = useState(DEFAULT_CATEGORIES[0]);
+  const [sponsorshipCategories, setSponsorshipCategories] = useState<string[]>(getSponsorshipCategories());
+  const [category, setCategory] = useState<string>(() => getSponsorshipCategories()[0] || 'Sponsorship - Pratima');
   const [customCategory, setCustomCategory] = useState('');
   const [residentName, setResidentName] = useState('');
   const [amount, setAmount] = useState('2500');
@@ -60,13 +53,9 @@ export const AddEntryPage: React.FC = () => {
     new Date().toISOString().slice(0, 10)
   );
 
-  // Custom Block & Floor State
-  const [customBlocks, setCustomBlocks] = useState<string[]>([]);
-  const [customFloors, setCustomFloors] = useState<number[]>([]);
-  const [isAddingNewBlock, setIsAddingNewBlock] = useState(false);
-  const [newBlockInput, setNewBlockInput] = useState('');
-  const [isAddingNewFloor, setIsAddingNewFloor] = useState(false);
-  const [newFloorInput, setNewFloorInput] = useState('');
+  const [activeBlocks, setActiveBlocks] = useState<string[]>(() => getActiveBlocks());
+  const [floorsPerBlock, setFloorsPerBlock] = useState<number>(() => getGlobalFloorsPerBlock());
+  const [flatsPerFloor, setFlatsPerFloor] = useState<number>(() => getGlobalFlatsPerFloor());
 
   const [successReceipt, setSuccessReceipt] = useState<{
     receiptNo: string;
@@ -78,6 +67,28 @@ export const AddEntryPage: React.FC = () => {
   const { data: flats = [] } = useGetFlatsQuery();
   const { data: collectors = [] } = useGetCollectorsQuery();
   const [createCollection, { isLoading: isSaving }] = useCreateCollectionMutation();
+
+  // Listen for settings updates to sync categories, blocks, and dimensions dynamically
+  useEffect(() => {
+    const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+    setActiveBlocks(getActiveBlocks(fromFlats));
+    setFloorsPerBlock(getGlobalFloorsPerBlock());
+    setFlatsPerFloor(getGlobalFlatsPerFloor());
+
+    const handleSettingsUpdate = () => {
+      const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+      setActiveBlocks(getActiveBlocks(fromFlats));
+      setFloorsPerBlock(getGlobalFloorsPerBlock());
+      setFlatsPerFloor(getGlobalFlatsPerFloor());
+      const updated = getSponsorshipCategories();
+      setSponsorshipCategories(updated);
+      if (!updated.includes(category) && category !== 'Other') {
+        setCategory(updated[0] || 'Other');
+      }
+    };
+    window.addEventListener('sgdps_settings_updated', handleSettingsUpdate);
+    return () => window.removeEventListener('sgdps_settings_updated', handleSettingsUpdate);
+  }, [category, flats]);
 
   // Collector dropdown options
   const collectorOptions = useMemo(() => {
@@ -92,87 +103,52 @@ export const AddEntryPage: React.FC = () => {
     return [defaultOption, ...collectorList];
   }, [collectors]);
 
-  // Dynamic available blocks combining defaults, loaded flats, and user additions
-  const availableBlocks = useMemo(() => {
-    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
-    const fromFlats = flats.map((f) => f.block).filter(Boolean);
-    return Array.from(new Set([...defaults, ...fromFlats, ...customBlocks]));
-  }, [flats, customBlocks]);
+  // Dynamic available blocks strictly from settings / active blocks
+  const availableBlocks = activeBlocks.length > 0 ? activeBlocks : ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
 
-  // Dynamic available floors
+  // Block-specific flats for the currently selected block
+  const blockFlats = useMemo(() => {
+    return flats.filter((f) => f.block === block);
+  }, [flats, block]);
+
+  // Floors based on global setting (default 9 floors)
   const availableFloors = useMemo(() => {
-    const defaults = Array.from({ length: 9 }, (_, i) => i + 1);
-    const fromFlats = flats.map((f) => f.floor).filter((f) => f > 0);
-    return Array.from(new Set([...defaults, ...fromFlats, ...customFloors])).sort((a, b) => a - b);
-  }, [flats, customFloors]);
+    const count = floorsPerBlock > 0 ? floorsPerBlock : 9;
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }, [floorsPerBlock]);
 
-  // Match flat if exists
+  // Flats per floor based on global setting (default 7 flats)
+  const availableFlatUnits = useMemo(() => {
+    const count = flatsPerFloor > 0 ? flatsPerFloor : 7;
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }, [flatsPerFloor]);
+
+  // Match flat if exists in selected block
   const selectedFlatNumber = `${floor}0${flat}`;
-  const matchedFlat = flats.find(
-    (f) =>
-      f.block === block &&
-      (f.flatNumber === selectedFlatNumber || f.flatNumber === String(flat))
+  const matchedFlat = blockFlats.find(
+    (f) => f.flatNumber === selectedFlatNumber || f.flatNumber === String(flat)
   );
-
-  const handleBlockSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === '__ADD_NEW_BLOCK__') {
-      setIsAddingNewBlock(true);
-      setNewBlockInput('');
-    } else {
-      setIsAddingNewBlock(false);
-      setBlock(val);
-    }
-  };
-
-  const handleSaveCustomBlock = () => {
-    const trimmed = newBlockInput.trim();
-    if (trimmed) {
-      if (!customBlocks.includes(trimmed)) {
-        setCustomBlocks((prev) => [...prev, trimmed]);
-      }
-      setBlock(trimmed);
-      setIsAddingNewBlock(false);
-      setNewBlockInput('');
-    }
-  };
-
-  const handleFloorSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === '__ADD_NEW_FLOOR__') {
-      setIsAddingNewFloor(true);
-      setNewFloorInput('');
-    } else {
-      setIsAddingNewFloor(false);
-      setFloor(parseInt(val));
-    }
-  };
-
-  const handleSaveCustomFloor = () => {
-    const parsed = parseInt(newFloorInput.trim());
-    if (!isNaN(parsed) && parsed > 0) {
-      if (!customFloors.includes(parsed)) {
-        setCustomFloors((prev) => [...prev, parsed]);
-      }
-      setFloor(parsed);
-      setIsAddingNewFloor(false);
-      setNewFloorInput('');
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
 
-    localStorage.setItem('sgdps_collector_name', collectedByName);
-
-    const finalBlock = isAddingNewBlock && newBlockInput.trim() ? newBlockInput.trim() : block;
-    const finalFloor = isAddingNewFloor && parseInt(newFloorInput.trim()) > 0 ? parseInt(newFloorInput.trim()) : floor;
+    const finalBlock = block;
+    const finalFloor = floor;
 
     try {
       const finalCategory =
         category === 'Other' && customCategory.trim() ? customCategory.trim() : category;
+
+      // Preserve accurate local timestamp with current time
+      const now = new Date();
+      let collectionIso = now.toISOString();
+      if (collectionDate) {
+        const [y, m, d] = collectionDate.split('-').map(Number);
+        const entryDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        collectionIso = entryDate.toISOString();
+      }
 
       const result = await createCollection({
         type: entryType,
@@ -187,7 +163,7 @@ export const AddEntryPage: React.FC = () => {
         transactionReference: referenceNo.trim() || undefined,
         collectedByName: collectedByName,
         remarks: remarks.trim() || undefined,
-        collectionDateTime: new Date(collectionDate).toISOString(),
+        collectionDateTime: collectionIso,
       }).unwrap();
 
       setSuccessReceipt({
@@ -302,114 +278,30 @@ export const AddEntryPage: React.FC = () => {
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* TOWER / BLOCK */}
-                  <div>
-                    {!isAddingNewBlock ? (
-                      <Select
-                        label="Tower / Block"
-                        value={block}
-                        onChange={handleBlockSelectChange}
-                        options={[
-                          ...availableBlocks.map((b) => ({ label: b, value: b })),
-                          { label: '+ Add Block', value: '__ADD_NEW_BLOCK__' },
-                        ]}
-                      />
-                    ) : (
-                      <div>
-                        <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
-                          New Block *
-                        </label>
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            autoFocus
-                            placeholder="e.g. E-Block, Tower-5"
-                            value={newBlockInput}
-                            onChange={(e) => setNewBlockInput(e.target.value)}
-                            className="text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveCustomBlock}
-                            className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0"
-                            title="Save Block"
-                          >
-                            <Check size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsAddingNewBlock(false);
-                              setNewBlockInput('');
-                            }}
-                            className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300"
-                            title="Cancel"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <Select
+                    label="Tower / Block"
+                    value={block}
+                    onChange={(e) => setBlock(e.target.value)}
+                    options={availableBlocks.map((b) => ({ label: b, value: b }))}
+                  />
 
                   {/* FLOOR LEVEL */}
-                  <div>
-                    {!isAddingNewFloor ? (
-                      <Select
-                        label="Floor Level"
-                        value={floor}
-                        onChange={handleFloorSelectChange}
-                        options={[
-                          ...availableFloors.map((f) => ({
-                            label: `${formatOrdinal(f)} Floor`,
-                            value: f,
-                          })),
-                          { label: '+ Add Floor', value: '__ADD_NEW_FLOOR__' },
-                        ]}
-                      />
-                    ) : (
-                      <div>
-                        <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
-                          New Floor Number *
-                        </label>
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            type="number"
-                            min="1"
-                            autoFocus
-                            placeholder="e.g. 10, 11, 12"
-                            value={newFloorInput}
-                            onChange={(e) => setNewFloorInput(e.target.value)}
-                            className="text-xs"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleSaveCustomFloor}
-                            className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0"
-                            title="Add Floor"
-                          >
-                            <Check size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsAddingNewFloor(false);
-                              setNewFloorInput('');
-                            }}
-                            className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300"
-                            title="Cancel"
-                          >
-                            <X size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <Select
+                    label="Floor Level"
+                    value={floor}
+                    onChange={(e) => setFloor(parseInt(e.target.value))}
+                    options={availableFloors.map((f) => ({
+                      label: `${formatOrdinal(f)} Floor`,
+                      value: f,
+                    }))}
+                  />
 
                   {/* FLAT NUMBER */}
                   <Select
                     label="Flat Number"
                     value={flat}
                     onChange={(e) => setFlat(parseInt(e.target.value))}
-                    options={Array.from({ length: 7 }, (_, i) => i + 1).map((fl) => ({
+                    options={availableFlatUnits.map((fl) => ({
                       label: `Flat ${fl} (${floor}0${fl})`,
                       value: fl,
                     }))}
@@ -455,7 +347,7 @@ export const AddEntryPage: React.FC = () => {
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   options={[
-                    ...DEFAULT_CATEGORIES.map((c) => ({ label: c, value: c })),
+                    ...sponsorshipCategories.map((c) => ({ label: c, value: c })),
                     { label: 'Other Custom Purpose...', value: 'Other' },
                   ]}
                 />
@@ -522,13 +414,13 @@ export const AddEntryPage: React.FC = () => {
                   <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
                     Payment Mode *
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['Cash', 'UPI', 'BankTransfer'] as PaymentMode[]).map((mode) => (
+                  <div className="grid grid-cols-4 gap-2">
+                    {(['Cash', 'UPI', 'BankTransfer', 'Cheque'] as PaymentMode[]).map((mode) => (
                       <button
                         key={mode}
                         type="button"
                         onClick={() => setPaymentMode(mode)}
-                        className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
+                        className={`py-2 px-1 text-xs font-bold rounded-xl border transition-all text-center ${
                           paymentMode === mode
                             ? 'bg-saffron-50 dark:bg-saffron-950/40 border-saffron-500 text-saffron-700 dark:text-gold-400 shadow-sm'
                             : 'bg-cream-50 dark:bg-charcoal-900 border-cream-border dark:border-charcoal-700 text-charcoal-600 dark:text-charcoal-300'

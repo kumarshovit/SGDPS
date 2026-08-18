@@ -36,8 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { to: '/add', label: 'Add Collection', icon: PlusCircle, end: false, highlight: true },
     { to: '/grid', label: 'Block Grid Matrix', icon: Grid3X3, end: false },
     { to: '/collections', label: 'All Entries Ledger', icon: ReceiptText, end: false },
-    { to: '/flats', label: 'Flats & Residents', icon: Building2, end: false },
-    {to: '/expenses', label: 'Expenses', icon: WalletCards, end: false },
+    { to: '/expenses', label: 'Expenses', icon: WalletCards, end: false },
     { to: '/reports', label: 'Reports & Defaulters', icon: BarChart3, end: false },
     { to: '/users', label: 'Field Collectors', icon: Users2, end: false },
   ];

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   useGetCollectionsQuery,
   useCreateCollectionMutation,
@@ -10,15 +11,16 @@ import { formatCurrency, formatOrdinal } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Modal } from '../../../components/ui/Modal';
+import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { Badge } from '../../../components/ui/Badge';
-import { Building2, Layers, Trash2, IndianRupee, Flame } from 'lucide-react';
-import { PaymentMode } from '../../collections/types';
-
-const NUM_FLATS = 7;
+import { Building2, Layers, Trash2, IndianRupee, Flame, Plus } from 'lucide-react';
+import { PaymentMode, Collection } from '../../collections/types';
+import { getActiveBlocks } from '../../../utils/settingsHelper';
 
 export const BlockGridPage: React.FC = () => {
+  const navigate = useNavigate();
   const { data: collections = [], isLoading: isCollectionsLoading } = useGetCollectionsQuery();
   const { data: flatsData = [], isLoading: isFlatsLoading } = useGetFlatsQuery();
   const { data: collectors = [] } = useGetCollectorsQuery();
@@ -39,6 +41,7 @@ export const BlockGridPage: React.FC = () => {
 
   const [createCollection, { isLoading: isSaving }] = useCreateCollectionMutation();
   const [deleteCollection] = useDeleteCollectionMutation();
+  const [entryToDelete, setEntryToDelete] = useState<Collection | null>(null);
 
   // Collector dropdown options
   const collectorOptions = useMemo(() => {
@@ -53,13 +56,37 @@ export const BlockGridPage: React.FC = () => {
     return [defaultOption, ...collectorList];
   }, [collectors]);
 
-  // Dynamic available blocks list (from flats database, collections, and defaults)
-  const availableBlocks = useMemo(() => {
-    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
-    const fromFlats = flatsData.map((f) => f.block).filter(Boolean);
-    const fromCollections = collections.map((c) => c.block).filter(Boolean) as string[];
-    return Array.from(new Set([...defaults, ...fromFlats, ...fromCollections]));
-  }, [flatsData, collections]);
+  const [activeBlocks, setActiveBlocks] = useState<string[]>(() => {
+    const fromFlats = Array.from(new Set(flatsData.map((f) => f.block).filter(Boolean)));
+    return getActiveBlocks(fromFlats);
+  });
+
+  // Keep active blocks in sync with database and settings
+  useEffect(() => {
+    const fromFlats = Array.from(new Set(flatsData.map((f) => f.block).filter(Boolean)));
+    setActiveBlocks(getActiveBlocks(fromFlats));
+
+    const handleSettingsUpdated = () => {
+      setActiveBlocks(getActiveBlocks(fromFlats));
+    };
+
+    window.addEventListener('sgdps_settings_updated', handleSettingsUpdated);
+    return () => window.removeEventListener('sgdps_settings_updated', handleSettingsUpdated);
+  }, [flatsData]);
+
+  const availableBlocks = activeBlocks;
+
+  // Ensure activeBlock stays valid
+  useEffect(() => {
+    if (availableBlocks.length > 0 && !availableBlocks.includes(activeBlock)) {
+      setActiveBlock(availableBlocks[0]);
+    }
+  }, [availableBlocks, activeBlock]);
+
+  // All flats configured specifically for the active block
+  const blockFlats = useMemo(() => {
+    return flatsData.filter((f) => f.block === activeBlock);
+  }, [flatsData, activeBlock]);
 
   // Grid aggregation: gridData[block][floor][flat] = totalAmount
   const gridData = useMemo(() => {
@@ -82,23 +109,30 @@ export const BlockGridPage: React.FC = () => {
 
   const blockData = gridData[activeBlock] || {};
 
-  // Compute floors dynamically for active block
+  // Compute floors with minimum 9 floors for every block, plus any higher floors
   const floors = useMemo(() => {
-    const blockFlats = flatsData.filter((f) => f.block === activeBlock);
-    const maxFloorFromFlats = blockFlats.length > 0 ? Math.max(...blockFlats.map((f) => f.floor)) : 9;
-    const maxFloor = Math.max(9, maxFloorFromFlats);
+    const blockFloors = blockFlats.map((f) => f.floor).filter((f) => f > 0);
+    const maxFloor = Math.max(9, ...blockFloors);
     return Array.from({ length: maxFloor }, (_, i) => i + 1).reverse();
-  }, [flatsData, activeBlock]);
+  }, [blockFlats]);
 
-  const flats = Array.from({ length: NUM_FLATS }, (_, i) => i + 1);
+  // Compute flat unit numbers (min 4 flats per floor, or max unit present)
+  const flats = useMemo(() => {
+    const units = blockFlats.map((f) => {
+      const last = parseInt(f.flatNumber.slice(-1));
+      return isNaN(last) ? 1 : last;
+    });
+    const maxUnit = Math.max(4, ...units);
+    return Array.from({ length: maxUnit }, (_, i) => i + 1);
+  }, [blockFlats]);
 
   // Block Totals & Counts
   const { blockTotal, paidCount, totalUnits, pct } = useMemo(() => {
     let sum = 0;
     let paid = 0;
-    const total = floors.length * NUM_FLATS;
+    const total = floors.length * flats.length;
     for (const f of floors) {
-      for (let fl = 1; fl <= NUM_FLATS; fl++) {
+      for (const fl of flats) {
         const amt = blockData[f]?.[fl] || 0;
         sum += amt;
         if (amt > 0) paid++;
@@ -106,7 +140,7 @@ export const BlockGridPage: React.FC = () => {
     }
     const percent = total > 0 ? Math.round((paid / total) * 100) : 0;
     return { blockTotal: sum, paidCount: paid, totalUnits: total, pct: percent };
-  }, [blockData, floors]);
+  }, [blockData, floors, flats]);
 
   // Entries for the selected cell in the modal
   const cellEntries = useMemo(() => {
@@ -140,21 +174,28 @@ export const BlockGridPage: React.FC = () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
 
-    localStorage.setItem('sgdps_collector_name', collectorName.trim());
+    localStorage.setItem('sgdps_collector_name', collectorName);
 
     try {
+      const flatNumStr = `${selectedCell.floor}0${selectedCell.flat}`;
+      const matched = blockFlats.find(
+        (f) => f.flatNumber === flatNumStr || f.flatNumber === String(selectedCell.flat)
+      );
+
       await createCollection({
         type: 'ResidentBlock',
+        flatId: matched?.id,
         block: selectedCell.block,
         floor: selectedCell.floor,
-        flatNumber: `${selectedCell.floor}0${selectedCell.flat}`,
-        donorResidentName: residentName.trim() || undefined,
+        flatNumber: flatNumStr,
+        donorResidentName: residentName.trim() || matched?.ownerName || undefined,
         amount: amt,
         mode: paymentMode,
-        collectedByName: collectorName.trim(),
+        collectedByName: collectorName,
         collectionDateTime: new Date().toISOString(),
       }).unwrap();
 
+      setSelectedCell(null);
       setAmount('2500');
       setResidentName('');
     } catch (err: any) {
@@ -162,20 +203,10 @@ export const BlockGridPage: React.FC = () => {
     }
   };
 
-  const handleDeleteEntry = async (id: number) => {
-    const pin = window.prompt('Enter PIN to delete collection record:');
-    if (pin === null) return;
-    const storedPin = localStorage.getItem('sgdps_delete_pin') || '2026';
-    if (pin !== storedPin) {
-      alert('Incorrect PIN — record preserved');
-      return;
-    }
-
-    try {
-      await deleteCollection(id).unwrap();
-    } catch (err) {
-      alert('Failed to delete entry');
-    }
+  const handleConfirmDeleteEntry = async () => {
+    if (!entryToDelete) return;
+    await deleteCollection(entryToDelete.id).unwrap();
+    setEntryToDelete(null);
   };
 
   return (
@@ -232,10 +263,10 @@ export const BlockGridPage: React.FC = () => {
             </div>
 
             <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-leaf-600 dark:text-leaf-400">
-                Funds Collected
+              <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal-400">
+                Collected Total
               </span>
-              <div className="text-lg font-extrabold text-leaf-700 dark:text-leaf-300 font-mono">
+              <div className="text-lg font-extrabold text-saffron-700 dark:text-gold-400 font-mono">
                 {formatCurrency(blockTotal)}
               </div>
             </div>
@@ -263,70 +294,91 @@ export const BlockGridPage: React.FC = () => {
         title={`${activeBlock} Floor × Flat Grid`}
         subtitle={`Total Collected: ${formatCurrency(blockTotal)} (${paidCount} of ${totalUnits} Units Collected)`}
       >
-        <div className="overflow-x-auto pb-2">
-          <table className="w-full border-collapse min-w-[700px]">
-            <thead>
-              <tr className="border-b border-cream-border dark:border-charcoal-700">
-                <th className="py-2.5 px-3 text-left text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                  Floor
-                </th>
-                {flats.map((f) => (
-                  <th
-                    key={f}
-                    className="py-2.5 px-2 text-center text-xs font-bold text-charcoal-500 dark:text-charcoal-400"
-                  >
-                    Flat {f}
+        {floors.length === 0 || flats.length === 0 ? (
+          <div className="py-12 text-center text-charcoal-400">
+            <Building2 size={36} className="mx-auto mb-2 opacity-40 text-gold-500" />
+            <p className="font-bold text-sm text-charcoal-700 dark:text-cream-200">
+              No flats configured for {activeBlock} yet.
+            </p>
+            <p className="text-xs text-charcoal-400 mt-1 max-w-md mx-auto">
+              Flats and floors added in &apos;Flats &amp; Residents&apos; for {activeBlock} will automatically appear in this grid matrix.
+            </p>
+            <Button
+              variant="primary"
+              size="sm"
+              className="mt-4"
+              onClick={() => navigate('/flats')}
+              leftIcon={<Plus size={14} />}
+            >
+              Add Flats for {activeBlock}
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto pb-2">
+            <table className="w-full border-collapse min-w-[700px]">
+              <thead>
+                <tr className="border-b border-cream-border dark:border-charcoal-700">
+                  <th className="py-2.5 px-3 text-left text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                    Floor
                   </th>
-                ))}
-                <th className="py-2.5 px-3 text-right text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                  Floor Total
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60">
-              {floors.map((floor) => {
-                const floorObj = blockData[floor] || {};
-                const floorTotal = Object.values(floorObj).reduce((s, v) => s + v, 0);
+                  {flats.map((f) => (
+                    <th
+                      key={f}
+                      className="py-2.5 px-2 text-center text-xs font-bold text-charcoal-500 dark:text-charcoal-400"
+                    >
+                      Flat {f}
+                    </th>
+                  ))}
+                  <th className="py-2.5 px-3 text-right text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                    Floor Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60">
+                {floors.map((floor) => {
+                  const floorObj = blockData[floor] || {};
+                  const floorTotal = Object.values(floorObj).reduce((s, v) => s + v, 0);
 
-                return (
-                  <tr key={floor} className="hover:bg-cream-50/50 dark:hover:bg-charcoal-700/30 transition-colors">
-                    <td className="py-2.5 px-3 text-xs font-bold text-charcoal-800 dark:text-cream-200 whitespace-nowrap">
-                      {formatOrdinal(floor)} Floor
-                    </td>
-                    {flats.map((flat) => {
-                      const amt = floorObj[flat] || 0;
-                      const isPaid = amt > 0;
+                  return (
+                    <tr key={floor} className="hover:bg-cream-50/50 dark:hover:bg-charcoal-700/30 transition-colors">
+                      <td className="py-2.5 px-3 text-xs font-bold text-charcoal-800 dark:text-cream-200 whitespace-nowrap">
+                        {formatOrdinal(floor)} Floor
+                      </td>
+                      {flats.map((flat) => {
+                        const amt = floorObj[flat] || 0;
+                        const isPaid = amt > 0;
 
-                      return (
-                        <td key={flat} className="p-1.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleCellClick(activeBlock, floor, flat)}
-                            className={`w-full py-2 px-1 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center border ${
-                              isPaid
-                                ? 'bg-leaf-500/15 border-leaf-500/40 text-leaf-800 dark:text-leaf-300 shadow-glow-leaf hover:bg-leaf-500/25'
-                                : 'bg-cream-50/70 dark:bg-charcoal-900 border-cream-border dark:border-charcoal-700 text-charcoal-400 hover:border-gold-500/50 hover:bg-cream-100 dark:hover:bg-charcoal-700'
-                            }`}
-                          >
-                            <span className="text-[10px] opacity-75 font-mono">
-                              {floor}0{flat}
-                            </span>
-                            <span className="font-extrabold text-[11px]">
-                              {isPaid ? formatCurrency(amt) : '—'}
-                            </span>
-                          </button>
-                        </td>
-                      );
-                    })}
-                    <td className="py-2.5 px-3 text-right text-xs font-extrabold text-charcoal-900 dark:text-cream-50 whitespace-nowrap">
-                      {floorTotal > 0 ? formatCurrency(floorTotal) : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                        return (
+                          <td key={flat} className="p-1.5 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleCellClick(activeBlock, floor, flat)}
+                              className={`w-full py-2 px-1 rounded-xl text-xs font-bold transition-all flex flex-col items-center justify-center border ${
+                                isPaid
+                                  ? 'bg-leaf-500/15 border-leaf-500/40 text-leaf-800 dark:text-leaf-300 shadow-glow-leaf hover:bg-leaf-500/25'
+                                  : 'bg-cream-50/70 dark:bg-charcoal-900 border-cream-border dark:border-charcoal-700 text-charcoal-400 hover:border-gold-500/50 hover:bg-cream-100 dark:hover:bg-charcoal-700'
+                              }`}
+                            >
+                              <span className="text-[10px] opacity-75 font-mono">
+                                {floor}0{flat}
+                              </span>
+                              <span className="font-extrabold text-[11px]">
+                                {isPaid ? formatCurrency(amt) : '—'}
+                              </span>
+                            </button>
+                          </td>
+                        );
+                      })}
+                      <td className="py-2.5 px-3 text-right text-xs font-extrabold text-charcoal-900 dark:text-cream-50 whitespace-nowrap">
+                        {floorTotal > 0 ? formatCurrency(floorTotal) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </GlassCard>
 
       {/* Quick Collect & Cell Inspector Modal */}
@@ -348,25 +400,20 @@ export const BlockGridPage: React.FC = () => {
                   {cellEntries.map((e) => (
                     <div key={e.id} className="flex items-center justify-between py-2 px-2 text-xs">
                       <div>
-                        <span className="font-bold text-charcoal-900 dark:text-cream-50">
-                          {e.donorResidentName || 'Resident'}
-                        </span>
-                        <p className="text-[10px] text-charcoal-400">
-                          {e.mode} · by {e.collectedByName || 'Admin'}
-                        </p>
+                        <div className="font-bold text-charcoal-800 dark:text-cream-100">
+                          {formatCurrency(e.amount)} · <span className="font-normal">{e.donorResidentName || 'Resident'}</span>
+                        </div>
+                        <div className="text-[11px] text-charcoal-400">
+                          {e.receiptNumber} · {e.mode} · by {e.collectedByName || 'Collector'}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-leaf-700 dark:text-leaf-400">
-                          {formatCurrency(e.amount)}
-                        </span>
-                        <button
-                          onClick={() => handleDeleteEntry(e.id)}
-                          className="p-1 rounded text-maroon-600 hover:bg-maroon-500/10"
-                          title="Delete"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => setEntryToDelete(e)}
+                        className="text-charcoal-400 hover:text-maroon-700 p-1"
+                        title="Delete entry"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -408,28 +455,36 @@ export const BlockGridPage: React.FC = () => {
                   ]}
                 />
                 <Select
-                  label="Collected By"
+                  label="Collector"
                   value={collectorName}
                   onChange={(e) => setCollectorName(e.target.value)}
                   options={collectorOptions}
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setSelectedCell(null)}
-                >
-                  Cancel
+              <div className="flex justify-end gap-2 pt-2 border-t border-cream-100 dark:border-charcoal-700">
+                <Button type="button" variant="ghost" onClick={() => setSelectedCell(null)}>
+                  Close
                 </Button>
                 <Button type="submit" variant="primary" isLoading={isSaving}>
-                  Add Collection
+                  Save Entry
                 </Button>
               </div>
             </form>
           </div>
         </Modal>
+      )}
+
+      {/* Delete Confirmation PIN Modal */}
+      {entryToDelete && (
+        <DeleteConfirmModal
+          isOpen={Boolean(entryToDelete)}
+          onClose={() => setEntryToDelete(null)}
+          onConfirm={handleConfirmDeleteEntry}
+          title="Delete Collection Entry"
+          itemName={`Receipt #${entryToDelete.receiptNumber}`}
+          description={`This will permanently delete the recorded payment of ${formatCurrency(entryToDelete.amount)} for this unit.`}
+        />
       )}
     </div>
   );

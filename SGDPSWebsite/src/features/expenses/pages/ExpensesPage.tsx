@@ -10,6 +10,7 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
+import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import {
@@ -44,9 +45,11 @@ const EXPENSE_CATEGORIES = [
 
 export const ExpensesPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [filterCategory, setFilterCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [previewExpense, setPreviewExpense] = useState<Expense | null>(null);
+  const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
 
   // Form State
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
@@ -137,20 +140,10 @@ export const ExpensesPage: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    const pin = window.prompt('Enter PIN to delete this expense record:');
-    if (pin === null) return;
-    const storedPin = localStorage.getItem('sgdps_delete_pin') || '2026';
-    if (pin !== storedPin) {
-      alert('Incorrect PIN — expense preserved');
-      return;
-    }
-
-    try {
-      await deleteExpense(id).unwrap();
-    } catch (err) {
-      alert('Could not delete expense record');
-    }
+  const handleConfirmDelete = async () => {
+    if (!expenseToDelete) return;
+    await deleteExpense(expenseToDelete.id).unwrap();
+    setExpenseToDelete(null);
   };
 
   // Direct download receipt helper
@@ -197,49 +190,38 @@ export const ExpensesPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Category Distribution Pills Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setSelectedCategory('All')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-            selectedCategory === 'All'
-              ? 'bg-gradient-to-r from-saffron-600 to-gold-600 text-white shadow-gold'
-              : 'bg-white dark:bg-charcoal-800 text-charcoal-700 dark:text-cream-200 border border-cream-border dark:border-charcoal-700 hover:bg-cream-100 dark:hover:bg-charcoal-700'
-          }`}
-        >
-          All Expenses ({expenses.length})
-        </button>
-        {categorySummary.map((cat) => (
-          <button
-            key={cat.category}
-            type="button"
-            onClick={() => setSelectedCategory(cat.category)}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              selectedCategory === cat.category
-                ? 'bg-gradient-to-r from-saffron-600 to-gold-600 text-white shadow-gold'
-                : 'bg-white dark:bg-charcoal-800 text-charcoal-700 dark:text-cream-200 border border-cream-border dark:border-charcoal-700 hover:bg-cream-100 dark:hover:bg-charcoal-700'
-            }`}
-          >
-            {cat.category}: {formatCurrency(cat.totalAmount)}
-          </button>
-        ))}
-      </div>
-
       {/* Expenses Table GlassCard */}
       <GlassCard
         title={`Expenses List (${filteredExpenses.length})`}
         subtitle={`Total Outflow: ${formatCurrency(totalExpenseAmount)}`}
       >
-        <div className="mb-4">
-          <div className="relative flex items-center">
+        <div className="mb-4 flex flex-col sm:flex-row items-center gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 w-full flex items-center">
             <Search size={16} className="absolute left-3 text-gold-600 dark:text-gold-400" />
             <input
               type="text"
-              placeholder="Search vendor, description, category..."
+              placeholder="Search vendor, description, remarks, category..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2 rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 text-xs sm:text-sm text-charcoal-900 dark:text-cream-50 outline-none focus:ring-2 focus:ring-gold-500/50"
+            />
+          </div>
+
+          {/* Category Dropdown Filter */}
+          <div className="w-full sm:w-72">
+            <Select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              options={[
+                { label: `All Categories (${expenses.length})`, value: 'All' },
+                ...Array.from(
+                  new Set([...EXPENSE_CATEGORIES, ...expenses.map((e) => e.category).filter(Boolean)])
+                ).map((c) => ({
+                  label: c,
+                  value: c,
+                })),
+              ]}
             />
           </div>
         </div>
@@ -358,7 +340,7 @@ export const ExpensesPage: React.FC = () => {
                           </>
                         )}
                         <button
-                          onClick={() => handleDelete(exp.id)}
+                          onClick={() => setExpenseToDelete(exp)}
                           className="p-1 rounded-lg text-charcoal-400 hover:text-maroon-700 dark:hover:text-rose-400 transition-colors"
                           title="Delete expense"
                         >
@@ -553,6 +535,18 @@ export const ExpensesPage: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Delete Confirmation PIN Modal */}
+      {expenseToDelete && (
+        <DeleteConfirmModal
+          isOpen={Boolean(expenseToDelete)}
+          onClose={() => setExpenseToDelete(null)}
+          onConfirm={handleConfirmDelete}
+          title="Delete Expense Record"
+          itemName={`Expense of ${formatCurrency(expenseToDelete.amount)} (${expenseToDelete.category})`}
+          description={`This will permanently delete this expense record and update treasury accounts.`}
+        />
       )}
     </div>
   );

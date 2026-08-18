@@ -26,7 +26,7 @@ export const App: React.FC = () => {
           <Route path="add" element={<AddEntryPage />} />
           <Route path="grid" element={<BlockGridPage />} />
           <Route path="collections" element={<CollectionsPage />} />
-          <Route path="flats" element={<FlatMasterPage />} />
+          <Route path="flats" element={<Navigate to="/grid" replace />} />
           <Route path="expenses" element={<ExpensesPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="users" element={<UserManagementPage />} />

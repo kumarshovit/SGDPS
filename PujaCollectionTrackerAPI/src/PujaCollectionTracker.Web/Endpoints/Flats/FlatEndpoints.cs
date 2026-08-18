@@ -231,6 +231,96 @@ public class CreateFlatEndpoint(AppDbContext db) : Endpoint<CreateFlatRequest, R
   }
 }
 
+public record CreateBlockRequest(
+  string BlockName,
+  int Floors = 9,
+  int FlatsPerFloor = 7,
+  decimal ExpectedAmount = 2500);
+
+// POST /api/flats/create-block
+public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest, Results<Ok<List<FlatDto>>, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Post("/flats/create-block");
+    AllowAnonymous();
+    Tags("Flats");
+    Summary(s => s.Summary = "Create a complete block with 9 floors and 7 flats per floor automatically");
+  }
+
+  public override async Task<Results<Ok<List<FlatDto>>, ProblemHttpResult>> ExecuteAsync(CreateBlockRequest req, CancellationToken ct)
+  {
+    var blockName = req.BlockName?.Trim();
+    if (string.IsNullOrWhiteSpace(blockName))
+      return TypedResults.Problem(detail: "Block name is required", statusCode: 400);
+
+    var existingFlats = await db.Flats.AsNoTracking().Where(f => f.Block == blockName).ToListAsync(ct);
+    if (existingFlats.Count != 0)
+    {
+      var existingDtos = existingFlats
+        .Select(f => new FlatDto(
+          f.Id,
+          f.Block,
+          f.Floor,
+          f.FlatNumber,
+          f.OwnerName,
+          f.OwnerPhone,
+          f.Email,
+          f.ExpectedAmount,
+          0m,
+          f.ExpectedAmount,
+          "Pending",
+          f.IsActive,
+          f.CreatedAt))
+        .ToList();
+      return TypedResults.Ok(existingDtos);
+    }
+
+    int floorCount = req.Floors > 0 ? req.Floors : 9;
+    int unitsPerFloor = req.FlatsPerFloor > 0 ? req.FlatsPerFloor : 7;
+    var newFlats = new List<Flat>();
+
+    for (int fl = 1; fl <= floorCount; fl++)
+    {
+      for (int unit = 1; unit <= unitsPerFloor; unit++)
+      {
+        string flatNum = $"{fl}0{unit}";
+        newFlats.Add(new Flat
+        {
+          Block = blockName,
+          Floor = fl,
+          FlatNumber = flatNum,
+          OwnerName = $"Owner {blockName[..1].ToUpper()}-{flatNum}",
+          OwnerPhone = "",
+          ExpectedAmount = req.ExpectedAmount,
+          IsActive = true,
+          CreatedAt = DateTime.UtcNow
+        });
+      }
+    }
+
+    db.Flats.AddRange(newFlats);
+    await db.SaveChangesAsync(ct);
+
+    var dtos = newFlats.Select(f => new FlatDto(
+      f.Id,
+      f.Block,
+      f.Floor,
+      f.FlatNumber,
+      f.OwnerName,
+      f.OwnerPhone,
+      f.Email,
+      f.ExpectedAmount,
+      0m,
+      f.ExpectedAmount,
+      "Pending",
+      f.IsActive,
+      f.CreatedAt)).ToList();
+
+    return TypedResults.Ok(dtos);
+  }
+}
+
 // PUT /api/flats/{id}
 public class UpdateFlatEndpoint(AppDbContext db) : Endpoint<UpdateFlatRequest, Results<Ok<FlatDto>, NotFound, ProblemHttpResult>>
 {

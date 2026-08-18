@@ -8,6 +8,7 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
+import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
 import {
   Search,
   FileSpreadsheet,
@@ -24,6 +25,7 @@ export const CollectionsPage: React.FC = () => {
   const [filterType, setFilterType] = useState('all');
   const [filterMode, setFilterMode] = useState('all');
   const [selectedReceipt, setSelectedReceipt] = useState<Collection | null>(null);
+  const [collectionToDelete, setCollectionToDelete] = useState<Collection | null>(null);
 
   const { data: collections = [], isLoading } = useGetCollectionsQuery();
   const [deleteCollection] = useDeleteCollectionMutation();
@@ -34,21 +36,28 @@ export const CollectionsPage: React.FC = () => {
       if (filterType === 'other' && e.type !== 'SponsorshipOther') return false;
     }
     if (filterMode !== 'all' && e.mode !== filterMode) return false;
-    if (query) {
-      const hay = [
-        e.block,
-        e.floor,
-        e.flatNumber,
-        e.category,
+    if (query.trim()) {
+      const qTokens = query.toLowerCase().trim().split(/\s+/);
+      const searchFields = [
+        e.receiptNumber,
         e.donorResidentName,
+        e.flatNumber,
+        e.block,
+        e.floor ? `floor ${e.floor}` : '',
+        e.floor ? `fl ${e.floor}` : '',
+        e.category,
         e.collectedByName,
         e.remarks,
-        e.receiptNumber,
+        e.transactionReference,
+        e.mode,
+        String(e.amount),
       ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-      if (!hay.includes(query.toLowerCase())) return false;
+
+      const matches = qTokens.every((token) => searchFields.includes(token));
+      if (!matches) return false;
     }
     return true;
   });
@@ -71,20 +80,10 @@ export const CollectionsPage: React.FC = () => {
     exportToExcel(data, 'SGDPS_Collections_Ledger');
   };
 
-  const handleDelete = async (id: number) => {
-    const pin = window.prompt('Enter PIN to delete this collection entry:');
-    if (pin === null) return;
-    const storedPin = localStorage.getItem('sgdps_delete_pin') || '2026';
-    if (pin !== storedPin) {
-      alert('Incorrect PIN — entry preserved');
-      return;
-    }
-
-    try {
-      await deleteCollection(id).unwrap();
-    } catch (err) {
-      alert('Failed to delete entry');
-    }
+  const handleConfirmDelete = async () => {
+    if (!collectionToDelete) return;
+    await deleteCollection(collectionToDelete.id).unwrap();
+    setCollectionToDelete(null);
   };
 
   const handleWhatsAppShare = (c: Collection) => {
@@ -262,9 +261,9 @@ export const CollectionsPage: React.FC = () => {
                           <Share2 size={15} />
                         </button>
                         <button
-                          onClick={() => handleDelete(c.id)}
+                          onClick={() => setCollectionToDelete(c)}
                           className="p-1.5 rounded-lg text-charcoal-500 hover:text-maroon-700 hover:bg-maroon-500/10 transition-colors"
-                          title="Delete"
+                          title="Delete Record"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -360,6 +359,18 @@ export const CollectionsPage: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Delete Confirmation PIN Modal */}
+      {collectionToDelete && (
+        <DeleteConfirmModal
+          isOpen={Boolean(collectionToDelete)}
+          onClose={() => setCollectionToDelete(null)}
+          onConfirm={handleConfirmDelete}
+          title="Delete Collection Receipt"
+          itemName={`Receipt #${collectionToDelete.receiptNumber}`}
+          description={`This will permanently delete the collection entry of ${formatCurrency(collectionToDelete.amount)} for ${collectionToDelete.donorResidentName || 'Resident'}.`}
+        />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   useGetFlatsQuery,
-  useCreateFlatMutation,
+  useCreateBlockMutation,
   useUpdateFlatMutation,
   useDeleteFlatMutation,
 } from '../api/flatApiSlice';
@@ -10,62 +10,48 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
+import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
 import { Input } from '../../../components/ui/Input';
-import { Select } from '../../../components/ui/Select';
 import {
   Plus,
   Search,
   FileSpreadsheet,
   Edit2,
   Trash2,
-  Check,
-  X,
-  Building,
-  Layers,
+  Building2,
+  Sparkles,
 } from 'lucide-react';
 import { Flat } from '../types';
 import { exportFlatsToExcel } from '../../../utils/exportHelpers';
+import { formatBlockName } from '../../../utils/settingsHelper';
 
 export const FlatMasterPage: React.FC = () => {
   const [selectedBlock, setSelectedBlock] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+
+  // Add Block Modal State
+  const [isAddBlockModalOpen, setIsAddBlockModalOpen] = useState<boolean>(false);
+  const [blockNameToCreate, setBlockNameToCreate] = useState<string>('');
+  const [blockError, setBlockError] = useState<string>('');
+
+  // Edit Flat Modal State
   const [editingFlat, setEditingFlat] = useState<Flat | null>(null);
-
-  // Form State
-  const [block, setBlock] = useState<string>('A-Block');
-  const [floor, setFloor] = useState<number>(1);
-  const [flatNumber, setFlatNumber] = useState<string>('');
-  const [ownerName, setOwnerName] = useState<string>('');
-  const [ownerPhone, setOwnerPhone] = useState<string>('');
-  const [expectedAmount, setExpectedAmount] = useState<string>('2500');
-
-  // Custom Block & Floor State
-  const [customBlocks, setCustomBlocks] = useState<string[]>([]);
-  const [customFloors, setCustomFloors] = useState<number[]>([]);
-  const [isAddingNewBlock, setIsAddingNewBlock] = useState<boolean>(false);
-  const [newBlockInput, setNewBlockInput] = useState<string>('');
-  const [isAddingNewFloor, setIsAddingNewFloor] = useState<boolean>(false);
-  const [newFloorInput, setNewFloorInput] = useState<string>('');
+  const [editOwnerName, setEditOwnerName] = useState<string>('');
+  const [editOwnerPhone, setEditOwnerPhone] = useState<string>('');
+  const [editFlatNumber, setEditFlatNumber] = useState<string>('');
+  const [flatToDelete, setFlatToDelete] = useState<Flat | null>(null);
 
   const { data: flats = [], isLoading } = useGetFlatsQuery();
-  const [createFlat, { isLoading: isCreating }] = useCreateFlatMutation();
+  const [createBlock, { isLoading: isCreatingBlock }] = useCreateBlockMutation();
   const [updateFlat, { isLoading: isUpdating }] = useUpdateFlatMutation();
   const [deleteFlat] = useDeleteFlatMutation();
 
-  // Dynamic available blocks combining default blocks, existing flat records, and custom additions
+  // Dynamic available blocks strictly from existing flat records
   const availableBlocks = useMemo(() => {
-    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
-    const fromFlats = flats.map((f) => f.block).filter(Boolean);
-    return Array.from(new Set([...defaults, ...fromFlats, ...customBlocks]));
-  }, [flats, customBlocks]);
-
-  // Dynamic available floors combining 1-9, existing flat records, and custom additions
-  const availableFloors = useMemo(() => {
-    const defaults = Array.from({ length: 9 }, (_, i) => i + 1);
-    const fromFlats = flats.map((f) => f.floor).filter((f) => f > 0);
-    return Array.from(new Set([...defaults, ...fromFlats, ...customFloors])).sort((a, b) => a - b);
-  }, [flats, customFloors]);
+    const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+    if (fromFlats.length > 0) return fromFlats;
+    return ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+  }, [flats]);
 
   // Filter options with dynamic blocks
   const filterBlocks = useMemo(() => {
@@ -88,132 +74,77 @@ export const FlatMasterPage: React.FC = () => {
   const partialFlats = flats.filter((f) => f.paymentStatus === 'PartiallyPaid').length;
   const pendingFlats = flats.filter((f) => f.paymentStatus === 'Pending').length;
 
-  const handleOpenAddModal = () => {
-    setEditingFlat(null);
-    setBlock(availableBlocks[0] || 'A-Block');
-    setFloor(availableFloors[0] || 1);
-    setFlatNumber('');
-    setOwnerName('');
-    setOwnerPhone('');
-    setExpectedAmount('2500');
-    setIsAddingNewBlock(false);
-    setNewBlockInput('');
-    setIsAddingNewFloor(false);
-    setNewFloorInput('');
-    setIsModalOpen(true);
+  const handleOpenAddBlockModal = () => {
+    setBlockNameToCreate('');
+    setBlockError('');
+    setIsAddBlockModalOpen(true);
   };
 
-  const handleOpenEditModal = (flat: Flat) => {
-    setEditingFlat(flat);
-    setBlock(flat.block);
-    setFloor(flat.floor);
-    setFlatNumber(flat.flatNumber);
-    setOwnerName(flat.ownerName);
-    setOwnerPhone(flat.ownerPhone || '');
-    setExpectedAmount(flat.expectedAmount.toString());
-    setIsAddingNewBlock(false);
-    setNewBlockInput('');
-    setIsAddingNewFloor(false);
-    setNewFloorInput('');
-    setIsModalOpen(true);
-  };
-
-  const handleBlockSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === '__ADD_NEW_BLOCK__') {
-      setIsAddingNewBlock(true);
-      setNewBlockInput('');
-    } else {
-      setIsAddingNewBlock(false);
-      setBlock(val);
-    }
-  };
-
-  const handleSaveCustomBlock = () => {
-    const trimmed = newBlockInput.trim();
-    if (trimmed) {
-      if (!customBlocks.includes(trimmed)) {
-        setCustomBlocks((prev) => [...prev, trimmed]);
-      }
-      setBlock(trimmed);
-      setIsAddingNewBlock(false);
-      setNewBlockInput('');
-    }
-  };
-
-  const handleFloorSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === '__ADD_NEW_FLOOR__') {
-      setIsAddingNewFloor(true);
-      setNewFloorInput('');
-    } else {
-      setIsAddingNewFloor(false);
-      setFloor(parseInt(val));
-    }
-  };
-
-  const handleSaveCustomFloor = () => {
-    const parsed = parseInt(newFloorInput.trim());
-    if (!isNaN(parsed) && parsed > 0) {
-      if (!customFloors.includes(parsed)) {
-        setCustomFloors((prev) => [...prev, parsed]);
-      }
-      setFloor(parsed);
-      setIsAddingNewFloor(false);
-      setNewFloorInput('');
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleCreateBlockSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!flatNumber.trim() || !ownerName.trim()) return;
+    setBlockError('');
+    const raw = blockNameToCreate.trim();
+    if (!raw) return;
 
-    // Apply any in-progress custom block or floor input
-    const finalBlock = isAddingNewBlock && newBlockInput.trim() ? newBlockInput.trim() : block;
-    const finalFloor = isAddingNewFloor && parseInt(newFloorInput.trim()) > 0 ? parseInt(newFloorInput.trim()) : floor;
+    const formatted = formatBlockName(raw);
 
-    try {
-      if (editingFlat) {
-        await updateFlat({
-          id: editingFlat.id,
-          block: finalBlock,
-          floor: finalFloor,
-          flatNumber: flatNumber.trim(),
-          ownerName: ownerName.trim(),
-          ownerPhone: ownerPhone.trim(),
-          expectedAmount: parseFloat(expectedAmount) || 0,
-          isActive: true,
-        }).unwrap();
-      } else {
-        await createFlat({
-          block: finalBlock,
-          floor: finalFloor,
-          flatNumber: flatNumber.trim(),
-          ownerName: ownerName.trim(),
-          ownerPhone: ownerPhone.trim(),
-          expectedAmount: parseFloat(expectedAmount) || 0,
-        }).unwrap();
-      }
-      setIsModalOpen(false);
-    } catch (err: any) {
-      alert(err?.data?.detail || 'Failed to save flat record');
-    }
-  };
+    const isDuplicate = availableBlocks.some(
+      (b) => b.toLowerCase() === formatted.toLowerCase() || b.toLowerCase() === raw.toLowerCase()
+    );
 
-  const handleDelete = async (id: number) => {
-    const pin = window.prompt('Enter PIN to delete this flat record:');
-    if (pin === null) return;
-    const storedPin = localStorage.getItem('sgdps_delete_pin') || '2026';
-    if (pin !== storedPin) {
-      alert('Incorrect PIN — record preserved');
+    if (isDuplicate) {
+      setBlockError(`Block "${formatted}" already exists in society.`);
       return;
     }
 
     try {
-      await deleteFlat(id).unwrap();
-    } catch (err) {
-      alert('Could not delete flat');
+      await createBlock({
+        blockName: formatted,
+        floors: 9,
+        flatsPerFloor: 7,
+      }).unwrap();
+
+      setIsAddBlockModalOpen(false);
+      setBlockNameToCreate('');
+      setSelectedBlock(formatted);
+    } catch (err: any) {
+      setBlockError(err?.data?.detail || 'Failed to create block');
     }
+  };
+
+  const handleOpenEditModal = (flat: Flat) => {
+    setEditingFlat(flat);
+    setEditFlatNumber(flat.flatNumber);
+    setEditOwnerName(flat.ownerName);
+    setEditOwnerPhone(flat.ownerPhone || '');
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFlat || !editFlatNumber.trim() || !editOwnerName.trim()) return;
+
+    try {
+      await updateFlat({
+        id: editingFlat.id,
+        block: editingFlat.block,
+        floor: editingFlat.floor,
+        flatNumber: editFlatNumber.trim(),
+        ownerName: editOwnerName.trim(),
+        ownerPhone: editOwnerPhone.trim(),
+        expectedAmount: editingFlat.expectedAmount,
+        isActive: editingFlat.isActive,
+      }).unwrap();
+
+      setEditingFlat(null);
+    } catch (err: any) {
+      alert(err?.data?.detail || 'Failed to update flat');
+    }
+  };
+
+  const handleConfirmDeleteFlat = async () => {
+    if (!flatToDelete) return;
+    await deleteFlat(flatToDelete.id).unwrap();
+    setFlatToDelete(null);
   };
 
   return (
@@ -225,7 +156,7 @@ export const FlatMasterPage: React.FC = () => {
             Flats & Resident Master
           </h1>
           <p className="text-xs sm:text-sm text-charcoal-500 dark:text-charcoal-300 mt-1">
-            Directory of resident flats, contribution targets, and real-time payment statuses.
+            Directory of resident flats and real-time payment statuses.
           </p>
         </div>
 
@@ -242,9 +173,9 @@ export const FlatMasterPage: React.FC = () => {
             variant="primary"
             size="sm"
             leftIcon={<Plus size={15} />}
-            onClick={handleOpenAddModal}
+            onClick={handleOpenAddBlockModal}
           >
-            Add Flat
+            Add Block
           </Button>
         </div>
       </div>
@@ -310,7 +241,6 @@ export const FlatMasterPage: React.FC = () => {
                 <th className="py-3.5 px-4">Unit Details</th>
                 <th className="py-3.5 px-4">Resident Name</th>
                 <th className="py-3.5 px-4">Contact</th>
-                <th className="py-3.5 px-4">Target (₹)</th>
                 <th className="py-3.5 px-4">Paid (₹)</th>
                 <th className="py-3.5 px-4">Status</th>
                 <th className="py-3.5 px-4 text-right">Actions</th>
@@ -319,13 +249,13 @@ export const FlatMasterPage: React.FC = () => {
             <tbody className="divide-y divide-cream-border dark:divide-charcoal-700/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-charcoal-400">
+                  <td colSpan={6} className="py-8 text-center text-charcoal-400">
                     Loading resident flats...
                   </td>
                 </tr>
               ) : filteredFlats.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-charcoal-400">
+                  <td colSpan={6} className="py-8 text-center text-charcoal-400">
                     No resident flats found matching criteria.
                   </td>
                 </tr>
@@ -346,9 +276,6 @@ export const FlatMasterPage: React.FC = () => {
                     </td>
                     <td className="py-3.5 px-4 text-charcoal-500 dark:text-charcoal-400 font-mono text-xs">
                       {flat.ownerPhone || '—'}
-                    </td>
-                    <td className="py-3.5 px-4 font-semibold text-charcoal-800 dark:text-cream-100 font-mono">
-                      {formatCurrency(flat.expectedAmount)}
                     </td>
                     <td className="py-3.5 px-4 font-bold text-leaf-700 dark:text-leaf-400 font-mono">
                       {formatCurrency(flat.totalCollected || 0)}
@@ -373,12 +300,12 @@ export const FlatMasterPage: React.FC = () => {
                         <button
                           onClick={() => handleOpenEditModal(flat)}
                           className="p-1.5 rounded-lg hover:bg-cream-200 dark:hover:bg-charcoal-600 text-charcoal-600 dark:text-charcoal-300 transition-colors"
-                          title="Edit Flat"
+                          title="Edit Resident Info"
                         >
                           <Edit2 size={15} />
                         </button>
                         <button
-                          onClick={() => handleDelete(flat.id)}
+                          onClick={() => setFlatToDelete(flat)}
                           className="p-1.5 rounded-lg hover:bg-maroon-100 dark:hover:bg-maroon-900/40 text-maroon-700 dark:text-rose-400 transition-colors"
                           title="Delete Flat"
                         >
@@ -394,172 +321,111 @@ export const FlatMasterPage: React.FC = () => {
         </div>
       </GlassCard>
 
-      {/* Add / Edit Flat Modal */}
-      {isModalOpen && (
+      {/* Add Block Modal */}
+      {isAddBlockModalOpen && (
         <Modal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title={editingFlat ? 'Edit Resident Flat' : 'Register New Resident Flat'}
-          subtitle="Configure unit details and target contribution"
+          isOpen={isAddBlockModalOpen}
+          onClose={() => setIsAddBlockModalOpen(false)}
+          title="Register New Block / Tower"
+          subtitle="Automatically generates 9 floors × 7 flats (63 units) for this block"
         >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              {/* TOWER / BLOCK SELECTOR */}
-              <div>
-                {!isAddingNewBlock ? (
-                  <Select
-                    label="Tower / Block"
-                    value={block}
-                    onChange={handleBlockSelectChange}
-                    options={[
-                      ...availableBlocks.map((b) => ({
-                        label: b,
-                        value: b,
-                      })),
-                      {
-                        label: '+ Add Block',
-                        value: '__ADD_NEW_BLOCK__',
-                      },
-                    ]}
-                  />
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
-                      New Block Name *
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        autoFocus
-                        placeholder="e.g. E-Block, Tower-5, Wing-C"
-                        value={newBlockInput}
-                        onChange={(e) => setNewBlockInput(e.target.value)}
-                        className="text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveCustomBlock}
-                        className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0 transition-all shadow-sm"
-                        title="Save Block"
-                      >
-                        <Check size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAddingNewBlock(false);
-                          setNewBlockInput('');
-                        }}
-                        className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300 hover:bg-cream-300 flex-shrink-0 transition-all"
-                        title="Cancel"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* FLOOR LEVEL SELECTOR */}
-              <div>
-                {!isAddingNewFloor ? (
-                  <Select
-                    label="Floor Level"
-                    value={floor}
-                    onChange={handleFloorSelectChange}
-                    options={[
-                      ...availableFloors.map((f) => ({
-                        label: `${formatOrdinal(f)} Floor`,
-                        value: f,
-                      })),
-                      {
-                        label: '+ Add Floor',
-                        value: '__ADD_NEW_FLOOR__',
-                      },
-                    ]}
-                  />
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
-                      New Floor Number *
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        type="number"
-                        min="1"
-                        autoFocus
-                        placeholder="e.g. 10, 11, 12, 15"
-                        value={newFloorInput}
-                        onChange={(e) => setNewFloorInput(e.target.value)}
-                        className="text-xs"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveCustomFloor}
-                        className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0 transition-all shadow-sm"
-                        title="Add Floor"
-                      >
-                        <Check size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAddingNewFloor(false);
-                          setNewFloorInput('');
-                        }}
-                        className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300 hover:bg-cream-300 flex-shrink-0 transition-all"
-                        title="Cancel"
-                      >
-                        <X size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleCreateBlockSubmit} className="space-y-4">
+            <div className="space-y-1.5">
               <Input
-                label="Flat Number *"
+                label="Block / Tower (Letter or Name) *"
                 required
-                value={flatNumber}
-                onChange={(e) => setFlatNumber(e.target.value)}
-                placeholder="101"
+                autoFocus
+                value={blockNameToCreate}
+                onChange={(e) => {
+                  setBlockNameToCreate(e.target.value);
+                  if (blockError) setBlockError('');
+                }}
+                placeholder="Enter letter (e.g. E, F, G, H) or block name"
+                icon={<Building2 size={16} />}
               />
-
-              <Input
-                label="Target Amount (₹)"
-                type="number"
-                min="0"
-                value={expectedAmount}
-                onChange={(e) => setExpectedAmount(e.target.value)}
-              />
+              {blockError && (
+                <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 animate-in fade-in">
+                  ⚠️ {blockError}
+                </p>
+              )}
             </div>
+
+            <div className="p-3.5 rounded-2xl bg-gold-500/10 border border-gold-500/30 flex items-start gap-2.5 text-xs text-charcoal-800 dark:text-cream-100">
+              <Sparkles size={18} className="text-gold-600 dark:text-gold-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <strong>Automatic 63-Unit Initialization:</strong>
+                <p className="text-[11px] text-charcoal-500 dark:text-charcoal-300 mt-0.5">
+                  Creating this block will automatically provision Floors 1 to 9 with 7 flats per floor (e.g. 101 to 907) ready for instant collection tracking.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
+              <Button type="button" variant="ghost" onClick={() => setIsAddBlockModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" isLoading={isCreatingBlock}>
+                Create Block & 63 Flats
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Edit Resident Flat Modal */}
+      {editingFlat && (
+        <Modal
+          isOpen={Boolean(editingFlat)}
+          onClose={() => setEditingFlat(null)}
+          title={`Edit ${editingFlat.block} · Flat ${editingFlat.flatNumber}`}
+          subtitle="Update resident name and contact information"
+        >
+          <form onSubmit={handleEditSubmit} className="space-y-4">
+            <Input
+              label="Flat Number *"
+              required
+              value={editFlatNumber}
+              onChange={(e) => setEditFlatNumber(e.target.value)}
+              placeholder="101"
+            />
 
             <Input
               label="Resident / Owner Name *"
               required
-              value={ownerName}
-              onChange={(e) => setOwnerName(e.target.value)}
+              value={editOwnerName}
+              onChange={(e) => setEditOwnerName(e.target.value)}
               placeholder="Full resident name"
             />
 
             <Input
               label="Phone / WhatsApp Number"
-              value={ownerPhone}
-              onChange={(e) => setOwnerPhone(e.target.value)}
+              value={editOwnerPhone}
+              onChange={(e) => setEditOwnerPhone(e.target.value)}
               placeholder="+91 9876543210"
             />
 
             <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
-              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>
+              <Button type="button" variant="ghost" onClick={() => setEditingFlat(null)}>
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" isLoading={isCreating || isUpdating}>
-                {editingFlat ? 'Update Flat' : 'Create Flat'}
+              <Button type="submit" variant="primary" isLoading={isUpdating}>
+                Save Changes
               </Button>
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* Delete Flat Confirmation Modal */}
+      {flatToDelete && (
+        <DeleteConfirmModal
+          isOpen={Boolean(flatToDelete)}
+          onClose={() => setFlatToDelete(null)}
+          onConfirm={handleConfirmDeleteFlat}
+          title="Delete Resident Flat"
+          itemName={`${flatToDelete.block} · Flat ${flatToDelete.flatNumber}`}
+          description={`This will permanently remove Flat ${flatToDelete.flatNumber} (${flatToDelete.ownerName}) from ${flatToDelete.block}.`}
+        />
       )}
     </div>
   );
