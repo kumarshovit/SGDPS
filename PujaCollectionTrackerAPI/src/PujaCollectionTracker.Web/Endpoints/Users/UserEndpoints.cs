@@ -51,8 +51,7 @@ public class ListCollectorsEndpoint(AppDbContext db) : EndpointWithoutRequest<Re
       .Where(u => userRoles.Contains(u.Id))
       .ToListAsync(ct);
 
-    var collections = await db.PaymentCollections.AsNoTracking().ToListAsync(ct);
-    var todayStr = DateTime.UtcNow.ToString("yyyy-MM-dd");
+    var today = DateTime.UtcNow.Date;
 
     var list = new List<CollectorDto>();
 
@@ -60,7 +59,7 @@ public class ListCollectorsEndpoint(AppDbContext db) : EndpointWithoutRequest<Re
     {
       var uIdStr = u.Id.Value.ToString();
       var uCollections = collections.Where(c => c.CollectedByUserId == uIdStr || c.CollectedByUserId == u.Email).ToList();
-      var todayCollections = uCollections.Where(c => c.CollectionDateTime.ToString("yyyy-MM-dd") == todayStr).ToList();
+      var todayCollections = uCollections.Where(c => c.CollectionDateTime.Date == today).ToList();
 
       list.Add(new CollectorDto(
         u.Id.Value,

@@ -106,10 +106,16 @@ public class ListCollectionsEndpoint(AppDbContext db) : Endpoint<ListCollections
       query = query.Where(c => c.CollectedByUserId == req.CollectorId);
 
     if (req.StartDate.HasValue)
-      query = query.Where(c => c.CollectionDateTime >= req.StartDate.Value);
+    {
+      var startDate = req.StartDate.Value.Date;
+      query = query.Where(c => c.CollectionDateTime >= startDate);
+    }
 
     if (req.EndDate.HasValue)
-      query = query.Where(c => c.CollectionDateTime <= req.EndDate.Value);
+    {
+      var endDate = req.EndDate.Value.Date.AddDays(1);
+      query = query.Where(c => c.CollectionDateTime < endDate);
+    }
 
     if (!string.IsNullOrWhiteSpace(req.Search))
     {

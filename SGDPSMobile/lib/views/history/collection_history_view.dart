@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/colors.dart';
-import '../../models/collection_model.dart';
 import '../../providers/collection_provider.dart';
 import '../collection/receipt_view.dart';
 

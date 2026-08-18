@@ -17,24 +17,35 @@ class CollectionProvider extends ChangeNotifier {
   bool get isSubmitting => _isSubmitting;
   String? get errorMessage => _errorMessage;
 
+  static bool _isSameCalendarDay(DateTime a, DateTime b) {
+    final la = a.isUtc ? a.toLocal() : a;
+    final lb = b.isUtc ? b.toLocal() : b;
+    return la.year == lb.year && la.month == lb.month && la.day == lb.day;
+  }
+
   double get todayTotal {
-    final today = DateTime.now();
+    final now = DateTime.now();
     return _collections
-        .where((c) =>
-            c.collectionDateTime.year == today.year &&
-            c.collectionDateTime.month == today.month &&
-            c.collectionDateTime.day == today.day)
+        .where((c) => _isSameCalendarDay(c.collectionDateTime, now))
         .fold(0.0, (sum, c) => sum + c.amount);
   }
 
   int get todayCount {
-    final today = DateTime.now();
+    final now = DateTime.now();
     return _collections
-        .where((c) =>
-            c.collectionDateTime.year == today.year &&
-            c.collectionDateTime.month == today.month &&
-            c.collectionDateTime.day == today.day)
+        .where((c) => _isSameCalendarDay(c.collectionDateTime, now))
         .length;
+  }
+
+  double get todayTotalAmount => todayTotal;
+
+  int get todayCollectionsCount => todayCount;
+
+  double get totalAmount {
+    return _collections.fold(
+      0.0,
+      (sum, collection) => sum + collection.amount,
+    );
   }
 
   Future<void> fetchCollections({String? collectorId}) async {
@@ -44,13 +55,18 @@ class CollectionProvider extends ChangeNotifier {
 
     try {
       final response = await ApiClient.get(ApiConstants.collections);
+      debugPrint('FETCH COLLECTIONS STATUS: ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
-        _collections = list.map((e) => CollectionModel.fromJson(e as Map<String, dynamic>)).toList();
+        _collections = list
+            .map((e) => CollectionModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        debugPrint('FETCHED ${_collections.length} COLLECTIONS');
       } else {
-        _errorMessage = 'Failed to load history';
+        _errorMessage = 'Failed to load history (${response.statusCode})';
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('FETCH COLLECTIONS ERROR: $e\n$stack');
       _errorMessage = 'Network connection failed';
     } finally {
       _isLoading = false;
@@ -88,7 +104,7 @@ class CollectionProvider extends ChangeNotifier {
         'longitude': position?.longitude,
         'collectedByName': collectorName,
         'remarks': remarks,
-        'collectionDateTime': DateTime.now().toUtc().toIso8601String(),
+        'collectionDateTime': DateTime.now().toIso8601String(),
       };
 
       final response = await ApiClient.post(ApiConstants.collections, payload);

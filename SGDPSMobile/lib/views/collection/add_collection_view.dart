@@ -25,12 +25,17 @@ class _AddCollectionViewState extends State<AddCollectionView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final flatProvider = Provider.of<FlatProvider>(context, listen: false);
-      if (flatProvider.flats.isNotEmpty) {
+      if (flatProvider.flats.isEmpty) {
+        await flatProvider.fetchFlats();
+      }
+      if (flatProvider.flats.isNotEmpty && mounted) {
         setState(() {
           _selectedFlat = flatProvider.flats.first;
-          _amountController.text = _selectedFlat!.expectedAmount.toStringAsFixed(0);
+          _amountController.text = _selectedFlat!.expectedAmount > 0
+              ? _selectedFlat!.expectedAmount.toStringAsFixed(0)
+              : '2500';
         });
       }
     });
@@ -39,7 +44,9 @@ class _AddCollectionViewState extends State<AddCollectionView> {
   void _onFlatSelected(FlatModel flat) {
     setState(() {
       _selectedFlat = flat;
-      _amountController.text = flat.expectedAmount > 0 ? flat.expectedAmount.toStringAsFixed(0) : '2500';
+      _amountController.text = flat.expectedAmount > 0
+          ? flat.expectedAmount.toStringAsFixed(0)
+          : '2500';
     });
   }
 
@@ -145,7 +152,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                         'Owner: ${_selectedFlat!.ownerName}',
                         style: const TextStyle(fontSize: 13, color: AppColors.inkMuted),
                       ),
-                      if (_selectedFlat!.ownerPhone != null && _selectedFlat!.ownerPhone!.isNotEmpty)
+                      if (_selectedFlat!.ownerPhone.isNotEmpty)
                         Text(
                           'Phone: ${_selectedFlat!.ownerPhone}',
                           style: const TextStyle(fontSize: 12, color: AppColors.inkLight),

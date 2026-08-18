@@ -39,6 +39,15 @@ class CollectionModel {
     this.remarks,
   });
 
+  static DateTime _parseDateTime(dynamic val) {
+    if (val == null) return DateTime.now();
+    final str = val.toString().trim();
+    if (str.isEmpty) return DateTime.now();
+    final parsed = DateTime.tryParse(str);
+    if (parsed == null) return DateTime.now();
+    return parsed.isUtc ? parsed.toLocal() : parsed;
+  }
+
   factory CollectionModel.fromJson(Map<String, dynamic> json) {
     return CollectionModel(
       id: json['id'] as int? ?? 0,
@@ -53,10 +62,10 @@ class CollectionModel {
       mode: json['mode'] as String? ?? 'Cash',
       receiptNumber: json['receiptNumber'] as String? ?? '',
       transactionReference: json['transactionReference'] as String?,
-      collectionDateTime: DateTime.tryParse(json['collectionDateTime'] as String? ?? '') ?? DateTime.now(),
+      collectionDateTime: _parseDateTime(json['collectionDateTime']),
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
-      collectedByUserId: json['collectedByUserId'] as String? ?? '',
+      collectedByUserId: json['collectedByUserId']?.toString() ?? '',
       collectedByName: json['collectedByName'] as String?,
       remarks: json['remarks'] as String?,
     );

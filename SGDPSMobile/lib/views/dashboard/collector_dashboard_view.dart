@@ -20,15 +20,25 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<CollectionProvider>(context, listen: false).fetchCollections();
-      Provider.of<FlatProvider>(context, listen: false).fetchFlats();
+      _loadData();
     });
+  }
+
+  Future<void> _loadData() async {
+    await Future.wait([
+      Provider.of<CollectionProvider>(context, listen: false).fetchCollections(),
+      Provider.of<FlatProvider>(context, listen: false).fetchFlats(),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final collectionProvider = Provider.of<CollectionProvider>(context);
+    final flatProvider = Provider.of<FlatProvider>(context);
+
+    final bool hasError = collectionProvider.errorMessage != null || flatProvider.errorMessage != null;
+    final String? errorText = collectionProvider.errorMessage ?? flatProvider.errorMessage;
 
     return Scaffold(
       backgroundColor: AppColors.cream,
@@ -75,15 +85,46 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
       ),
       body: RefreshIndicator(
         color: AppColors.saffron,
-        onRefresh: () async {
-          await collectionProvider.fetchCollections();
-        },
+        onRefresh: _loadData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Error Banner with Retry button if any request failed
+              if (hasError)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          errorText ?? 'Failed to load data',
+                          style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _loadData,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text('Retry', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+
               // Hero Summary Card: Deep Maroon + Saffron + Gold
               Container(
                 width: double.infinity,

@@ -22,12 +22,15 @@ class AuthProvider extends ChangeNotifier {
     _errorMessage = null;
     _successMessage = null;
     notifyListeners();
+    debugPrint('LOGIN URL: ${ApiConstants.login}');
 
     try {
       final response = await ApiClient.post(ApiConstants.login, {
         'email': email.trim(),
         'password': password.trim(),
       });
+      debugPrint('LOGIN STATUS: ${response.statusCode}');
+      debugPrint('LOGIN RESPONSE: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -43,12 +46,16 @@ class AuthProvider extends ChangeNotifier {
         return true;
       } else {
         final data = jsonDecode(response.body);
-        _errorMessage = data['detail'] ?? data['title'] ?? 'Invalid login credentials';
+        _errorMessage =
+            data['detail'] ?? data['title'] ?? 'Invalid login credentials';
         _isLoading = false;
         notifyListeners();
         return false;
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('LOGIN ERROR: $e');
+      debugPrint('LOGIN STACK: $stackTrace');
+
       _errorMessage = 'Network error: Cannot reach server';
       _isLoading = false;
       notifyListeners();
@@ -82,7 +89,8 @@ class AuthProvider extends ChangeNotifier {
         return await login(email, password);
       } else {
         final data = jsonDecode(response.body);
-        _errorMessage = data['detail'] ?? data['title'] ?? 'Registration failed';
+        _errorMessage =
+            data['detail'] ?? data['title'] ?? 'Registration failed';
         _isLoading = false;
         notifyListeners();
         return false;
@@ -108,12 +116,14 @@ class AuthProvider extends ChangeNotifier {
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        _successMessage = data['message'] ?? 'Password reset token generated. You can now reset password.';
+        _successMessage = data['message'] ??
+            'Password reset token generated. You can now reset password.';
         _isLoading = false;
         notifyListeners();
         return true;
       } else {
-        _errorMessage = data['detail'] ?? data['title'] ?? 'Failed to process request';
+        _errorMessage =
+            data['detail'] ?? data['title'] ?? 'Failed to process request';
         _isLoading = false;
         notifyListeners();
         return false;
@@ -145,12 +155,14 @@ class AuthProvider extends ChangeNotifier {
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
-        _successMessage = data['message'] ?? 'Password reset successfully! Please sign in.';
+        _successMessage =
+            data['message'] ?? 'Password reset successfully! Please sign in.';
         _isLoading = false;
         notifyListeners();
         return true;
       } else {
-        _errorMessage = data['detail'] ?? data['title'] ?? 'Failed to reset password';
+        _errorMessage =
+            data['detail'] ?? data['title'] ?? 'Failed to reset password';
         _isLoading = false;
         notifyListeners();
         return false;
