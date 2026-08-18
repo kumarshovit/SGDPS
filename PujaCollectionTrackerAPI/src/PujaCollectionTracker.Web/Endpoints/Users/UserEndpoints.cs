@@ -21,7 +21,7 @@ public record CollectorDto(
 
 public record CreateCollectorRequest(
   string FirstName,
-  string LastName,
+  string? LastName,
   string Email,
   string Password);
 
@@ -66,7 +66,7 @@ public class ListCollectorsEndpoint(AppDbContext db) : EndpointWithoutRequest<Re
         u.Id.Value,
         u.FirstName,
         u.LastName,
-        $"{u.FirstName} {u.LastName}",
+        $"{u.FirstName} {u.LastName}".Trim(),
         u.Email,
         u.IsActive,
         uCollections.Sum(c => c.Amount),
@@ -93,8 +93,18 @@ public class CreateCollectorEndpoint(AppDbContext db, IPasswordHasher hasher) : 
 
   public override async Task<Results<Created<CollectorDto>, ProblemHttpResult>> ExecuteAsync(CreateCollectorRequest req, CancellationToken ct)
   {
-    if (await db.Users.AnyAsync(u => u.Email == req.Email.Trim(), ct))
-      return TypedResults.Problem(detail: "User with this email already exists", statusCode: 400);
+    if (string.IsNullOrWhiteSpace(req.FirstName))
+      return TypedResults.Problem(detail: "First Name is required", statusCode: 400);
+
+    if (string.IsNullOrWhiteSpace(req.Email))
+      return TypedResults.Problem(detail: "Email is required", statusCode: 400);
+
+    if (string.IsNullOrWhiteSpace(req.Password))
+      return TypedResults.Problem(detail: "Password is required", statusCode: 400);
+
+    var cleanEmail = req.Email.Trim().ToLowerInvariant();
+    if (await db.Users.AnyAsync(u => u.Email.ToLower() == cleanEmail, ct))
+      return TypedResults.Problem(detail: "A user with this email address already exists.", statusCode: 400);
 
     var collectorRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "Collector", ct);
     if (collectorRole == null)
@@ -104,8 +114,8 @@ public class CreateCollectorEndpoint(AppDbContext db, IPasswordHasher hasher) : 
       await db.SaveChangesAsync(ct);
     }
 
-    var hash = hasher.Hash(req.Password);
-    var user = new User(req.FirstName.Trim(), req.LastName.Trim(), req.Email.Trim(), hash);
+    var hash = hasher.Hash(req.Password.Trim());
+    var user = new User(req.FirstName.Trim(), req.LastName?.Trim() ?? string.Empty, cleanEmail, hash);
     user.VerifyEmail();
     user.AssignRole(collectorRole);
 
@@ -116,7 +126,7 @@ public class CreateCollectorEndpoint(AppDbContext db, IPasswordHasher hasher) : 
       user.Id.Value,
       user.FirstName,
       user.LastName,
-      $"{user.FirstName} {user.LastName}",
+      $"{user.FirstName} {user.LastName}".Trim(),
       user.Email,
       user.IsActive,
       0m,

@@ -64,26 +64,28 @@ export const StatCard: React.FC<StatCardProps> = ({
           {value}
         </div>
 
-        <div className="mt-2 flex items-center gap-2">
-          {trend && (
-            <span
-              className={clsx(
-                'inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-md',
-                trendUp
-                  ? 'bg-leaf-500/15 text-leaf-700 dark:text-leaf-300'
-                  : 'bg-maroon-700/15 text-maroon-800 dark:text-maroon-300'
-              )}
-            >
-              {trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-              {trend}
-            </span>
-          )}
-          {subtitle && (
-            <span className="text-xs text-charcoal-500 dark:text-charcoal-400 font-medium">
-              {subtitle}
-            </span>
-          )}
-        </div>
+        {(trend || subtitle) && (
+          <div className="mt-2 flex items-center gap-2">
+            {trend && (
+              <span
+                className={clsx(
+                  'inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-md',
+                  trendUp
+                    ? 'bg-leaf-500/15 text-leaf-700 dark:text-leaf-300'
+                    : 'bg-maroon-700/15 text-maroon-800 dark:text-maroon-300'
+                )}
+              >
+                {trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                {trend}
+              </span>
+            )}
+            {subtitle && (
+              <span className="text-xs text-charcoal-500 dark:text-charcoal-400 font-medium">
+                {subtitle}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

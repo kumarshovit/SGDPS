@@ -1,121 +1,831 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useGetDefaultersQuery,
   useGetDateWiseReportQuery,
 } from '../api/reportApiSlice';
 import { useGetCollectionsQuery } from '../../collections/api/collectionApiSlice';
 import { useGetExpensesQuery } from '../../expenses/api/expenseApiSlice';
-import { formatCurrency } from '../../../utils/formatters';
+import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
+import { formatCurrency, formatDateTime, formatDate } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
+import { Input } from '../../../components/ui/Input';
+import { Select } from '../../../components/ui/Select';
 import {
   FileSpreadsheet,
   Download,
-  Share2,
+  Search,
+  Filter,
+  TrendingUp,
+  CreditCard,
+  Wallet,
+  Calendar,
+  Building,
+  Printer,
+  FileText,
   CheckCircle2,
 } from 'lucide-react';
 import {
+  exportToExcel,
+  exportToPdf,
   exportDefaultersToExcel,
   exportFinancialStatementPDF,
+  exportCategoryExpensesToExcel,
+  exportDateWiseReportToExcel,
+  exportExpensesToExcel,
 } from '../../../utils/exportHelpers';
 
-export const ReportsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'defaulters' | 'daily'>('defaulters');
+type DateFilterPreset = 'all_time' | 'today' | 'this_week' | 'this_month' | 'custom';
+type ReportType =
+  | 'collection_vs_expense'
+  | 'category_expenses'
+  | 'date_wise_expenses'
+  | 'collections_register'
+  | 'defaulters';
 
+export const ReportsPage: React.FC = () => {
+  // Report Configuration State
+  const [reportType, setReportType] = useState<ReportType>('collection_vs_expense');
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('pdf');
+  const [datePreset, setDatePreset] = useState<DateFilterPreset>('all_time');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState('ALL');
+  const [selectedBlock, setSelectedBlock] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Queries
   const { data: defaulters = [], isLoading: isDefaultersLoading } = useGetDefaultersQuery();
   const { data: dailyReports = [], isLoading: isDailyLoading } = useGetDateWiseReportQuery();
-  const { data: collections = [] } = useGetCollectionsQuery();
-  const { data: expenses = [] } = useGetExpensesQuery();
+  const { data: collections = [], isLoading: isCollectionsLoading } = useGetCollectionsQuery();
+  const { data: expenses = [], isLoading: isExpensesLoading } = useGetExpensesQuery();
+  const { data: flats = [] } = useGetFlatsQuery();
 
-  const totalOutstanding = defaulters.reduce((sum, d) => sum + d.pendingAmount, 0);
+  // Helper to determine if a date string falls inside the selected date preset / custom range
+  const isDateInRange = (dateStr?: string | null): boolean => {
+    if (!dateStr) return true;
+    if (datePreset === 'all_time') return true;
 
-  const handleWhatsAppReminder = (
-    phone: string,
-    name: string,
-    pending: number,
-    block: string,
-    flat: string
-  ) => {
-    const text = encodeURIComponent(
-      `🙏 *Namaste ${name} ji*,\n\n` +
-        `This is a gentle reminder regarding the upcoming *Durga Puja Contribution 2026* for flat *${block}-${flat}*.\n\n` +
-        `💰 *Outstanding Target:* ₹${pending}\n\n` +
-        `You can make the payment via UPI to the committee or cash in hand to our authorized collector.\n` +
-        `Thank you for your generous devotion and support!\n\n` +
-        `— *Durga Puja Committee*`
-    );
-    window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${text}`, '_blank');
+    const target = new Date(dateStr);
+    if (isNaN(target.getTime())) return true;
+
+    const now = new Date();
+
+    if (datePreset === 'today') {
+      return (
+        target.getFullYear() === now.getFullYear() &&
+        target.getMonth() === now.getMonth() &&
+        target.getDate() === now.getDate()
+      );
+    }
+
+    if (datePreset === 'this_week') {
+      const startOfWeek = new Date(now);
+      const day = startOfWeek.getDay();
+      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      startOfWeek.setDate(diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      return target >= startOfWeek && target <= endOfWeek;
+    }
+
+    if (datePreset === 'this_month') {
+      return (
+        target.getFullYear() === now.getFullYear() &&
+        target.getMonth() === now.getMonth()
+      );
+    }
+
+    if (datePreset === 'custom') {
+      if (fromDate) {
+        const start = new Date(fromDate);
+        start.setHours(0, 0, 0, 0);
+        if (target < start) return false;
+      }
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        if (target > end) return false;
+      }
+      return true;
+    }
+
+    return true;
+  };
+
+  // Filtered Collections
+  const filteredCollections = useMemo(() => {
+    return collections.filter((c) => {
+      if (!isDateInRange(c.collectionDateTime)) return false;
+      if (selectedPaymentMode !== 'ALL' && c.mode !== selectedPaymentMode) return false;
+      if (selectedBlock !== 'ALL' && c.block !== selectedBlock) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const donor = (c.donorResidentName || '').toLowerCase();
+        const blk = (c.block || '').toLowerCase();
+        const rec = (c.receiptNumber || '').toLowerCase();
+        const flatNo = (c.flatNumber || '').toLowerCase();
+        if (!donor.includes(q) && !blk.includes(q) && !rec.includes(q) && !flatNo.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [collections, datePreset, fromDate, toDate, selectedPaymentMode, selectedBlock, searchQuery]);
+
+  // Filtered Expenses
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((e) => {
+      if (!isDateInRange(e.expenseDate)) return false;
+      if (selectedCategory !== 'ALL' && e.category !== selectedCategory) return false;
+      if (selectedPaymentMode !== 'ALL' && e.paymentMode !== selectedPaymentMode) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const desc = (e.description || '').toLowerCase();
+        const vendor = (e.paidToVendor || '').toLowerCase();
+        const cat = (e.category || '').toLowerCase();
+        if (!desc.includes(q) && !vendor.includes(q) && !cat.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [expenses, datePreset, fromDate, toDate, selectedCategory, selectedPaymentMode, searchQuery]);
+
+  // Filtered Defaulters
+  const filteredDefaulters = useMemo(() => {
+    return defaulters.filter((d) => {
+      if (selectedBlock !== 'ALL' && d.block !== selectedBlock) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const name = (d.ownerName || '').toLowerCase();
+        const blk = (d.block || '').toLowerCase();
+        const flatNo = String(d.flatNumber || '').toLowerCase();
+        if (!name.includes(q) && !blk.includes(q) && !flatNo.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [defaulters, selectedBlock, searchQuery]);
+
+  // Financial Metrics (Calculated dynamically on Filtered Period)
+  const periodCollectionTotal = useMemo(
+    () => filteredCollections.reduce((s, c) => s + (c.amount || 0), 0),
+    [filteredCollections]
+  );
+  const periodExpenseTotal = useMemo(
+    () => filteredExpenses.reduce((s, e) => s + (e.amount || 0), 0),
+    [filteredExpenses]
+  );
+  const periodNetBalance = periodCollectionTotal - periodExpenseTotal;
+
+  // Category-wise summary on filtered expenses
+  const categoryStats = useMemo(() => {
+    const map: Record<string, { count: number; total: number }> = {};
+    for (const e of filteredExpenses) {
+      const cat = e.category || 'General Operations';
+      if (!map[cat]) map[cat] = { count: 0, total: 0 };
+      map[cat].count += 1;
+      map[cat].total += e.amount || 0;
+    }
+
+    return Object.entries(map)
+      .map(([category, stats]) => ({
+        category,
+        count: stats.count,
+        total: stats.total,
+        percentage: periodExpenseTotal > 0 ? Math.round((stats.total / periodExpenseTotal) * 100) : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [filteredExpenses, periodExpenseTotal]);
+
+  // Unique Lists for Dropdown Options
+  const availableCategories = useMemo(() => {
+    const set = new Set(expenses.map((e) => e.category).filter(Boolean));
+    return ['ALL', ...Array.from(set)];
+  }, [expenses]);
+
+  const availableBlocks = useMemo(() => {
+    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+    const fromFlats = flats.map((f) => f.block).filter(Boolean);
+    return ['ALL', ...Array.from(new Set([...defaults, ...fromFlats]))];
+  }, [flats]);
+
+  // Text label of active period filter
+  const activePeriodLabel = useMemo(() => {
+    if (datePreset === 'today') return 'Today';
+    if (datePreset === 'this_week') return 'This Week';
+    if (datePreset === 'this_month') return 'This Month';
+    if (datePreset === 'custom') return `${fromDate || 'Start'} to ${toDate || 'End'}`;
+    return 'All Time';
+  }, [datePreset, fromDate, toDate]);
+
+  // Export Action Dispatcher
+  const handleExecuteExport = () => {
+    const dateLabel = activePeriodLabel;
+
+    if (exportFormat === 'pdf') {
+      if (reportType === 'collection_vs_expense') {
+        const rows = [
+          ['Total Period Collections (Inflows)', formatCurrency(periodCollectionTotal)],
+          ['Total Period Expenses (Outflows)', formatCurrency(periodExpenseTotal)],
+          ['Net Available Period Balance', formatCurrency(periodNetBalance)],
+          ['Collection Entries Logged', filteredCollections.length.toString()],
+          ['Expense Vouchers Logged', filteredExpenses.length.toString()],
+          ['Report Filter Period', dateLabel],
+        ];
+        exportToPdf(
+          `Financial Balance Statement (${dateLabel})`,
+          ['Audit Line Item', 'Amount / Value'],
+          rows,
+          `SGDPS_Financial_Statement_${datePreset}`
+        );
+      } else if (reportType === 'category_expenses') {
+        const rows = categoryStats.map((c) => [
+          c.category,
+          `${c.count} vouchers`,
+          formatCurrency(c.total),
+          `${c.percentage}%`,
+        ]);
+        exportToPdf(
+          `Category-wise Expense Breakdown (${dateLabel})`,
+          ['Category', 'Count', 'Total Amount', 'Budget Share'],
+          rows,
+          `SGDPS_Category_Expenses_${datePreset}`
+        );
+      } else if (reportType === 'date_wise_expenses') {
+        const rows = filteredExpenses.map((e) => [
+          formatDateTime(e.expenseDate),
+          e.category,
+          e.description,
+          e.paidToVendor || '—',
+          e.paymentMode,
+          formatCurrency(e.amount),
+        ]);
+        exportToPdf(
+          `Expenses Ledger (${dateLabel})`,
+          ['Date', 'Category', 'Description', 'Vendor', 'Mode', 'Amount'],
+          rows,
+          `SGDPS_Expenses_Ledger_${datePreset}`
+        );
+      } else if (reportType === 'collections_register') {
+        const rows = filteredCollections.map((c) => [
+          c.receiptNumber || `REC-${c.id}`,
+          formatDateTime(c.collectionDateTime),
+          c.donorResidentName || 'Resident',
+          c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation'),
+          c.mode,
+          formatCurrency(c.amount),
+        ]);
+        exportToPdf(
+          `Collections & Inflows Register (${dateLabel})`,
+          ['Receipt #', 'Date', 'Donor / Resident', 'Flat / Source', 'Mode', 'Amount'],
+          rows,
+          `SGDPS_Collections_Register_${datePreset}`
+        );
+      } else if (reportType === 'defaulters') {
+        const rows = filteredDefaulters.map((d) => [
+          `${d.block} · Fl ${d.floor} · Flat ${d.flatNumber}`,
+          d.ownerName,
+          d.ownerPhone || '—',
+          formatCurrency(d.expectedAmount),
+          formatCurrency(d.paidAmount),
+          formatCurrency(d.pendingAmount),
+        ]);
+        exportToPdf(
+          `Outstanding Defaulters Recovery Statement`,
+          ['Flat & Tower', 'Resident', 'Phone', 'Target', 'Paid', 'Pending Due'],
+          rows,
+          `SGDPS_Pending_Defaulters`
+        );
+      }
+    } else {
+      // Excel Export
+      if (reportType === 'category_expenses') {
+        exportCategoryExpensesToExcel(categoryStats);
+      } else if (reportType === 'date_wise_expenses') {
+        exportExpensesToExcel(filteredExpenses);
+      } else if (reportType === 'defaulters') {
+        exportDefaultersToExcel(filteredDefaulters);
+      } else if (reportType === 'collections_register') {
+        const data = filteredCollections.map((c) => ({
+          'Receipt No': c.receiptNumber || `REC-${c.id}`,
+          Date: formatDateTime(c.collectionDateTime),
+          'Resident / Donor': c.donorResidentName,
+          'Flat / Source': c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : c.category,
+          'Amount (Rs)': c.amount,
+          'Payment Mode': c.mode,
+          'Collected By': c.collectedByName,
+          'Txn Reference': c.transactionReference || '',
+        }));
+        exportToExcel(data, `SGDPS_Collections_${datePreset}`);
+      } else {
+        const data = [
+          { 'Metric': 'Total Collections (Inflows)', 'Amount (Rs)': periodCollectionTotal, 'Count': filteredCollections.length },
+          { 'Metric': 'Total Expenses (Outflows)', 'Amount (Rs)': periodExpenseTotal, 'Count': filteredExpenses.length },
+          { 'Metric': 'Net Treasury Balance', 'Amount (Rs)': periodNetBalance, 'Count': '-' },
+          { 'Metric': 'Filter Period', 'Amount (Rs)': dateLabel, 'Count': '-' },
+        ];
+        exportToExcel(data, `SGDPS_Balance_Statement_${datePreset}`);
+      }
+    }
   };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Sonora-Style Executive Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white dark:bg-charcoal-800 p-5 rounded-2xl border border-cream-border dark:border-charcoal-700 shadow-sm">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-charcoal-900 dark:text-cream-50 font-display">
-            Reports & Defaulters Recovery
+            Reports & Statement
           </h1>
           <p className="text-xs sm:text-sm text-charcoal-500 dark:text-charcoal-300 mt-1">
-            Track outstanding dues, generate WhatsApp reminder links, and audit daily cash inflows vs outflows.
+            Filter, inspect and export date-wise, category-wise, and financial balance reports.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<FileSpreadsheet size={15} />}
-            onClick={() => exportDefaultersToExcel(defaulters)}
-          >
-            Export Defaulters
-          </Button>
+        {/* Sonora Format Selector & Action Button */}
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Format Radio Selection */}
+          <div className="flex items-center gap-3 bg-cream-100 dark:bg-charcoal-900 px-3.5 py-2 rounded-xl border border-cream-border dark:border-charcoal-700">
+            <label className="flex items-center gap-1.5 text-xs font-bold text-charcoal-800 dark:text-cream-100 cursor-pointer">
+              <input
+                type="radio"
+                name="exportFormat"
+                value="pdf"
+                checked={exportFormat === 'pdf'}
+                onChange={() => setExportFormat('pdf')}
+                className="text-saffron-600 focus:ring-saffron-500"
+              />
+              <FileText size={14} className="text-rose-600" />
+              PDF
+            </label>
+
+            <label className="flex items-center gap-1.5 text-xs font-bold text-charcoal-800 dark:text-cream-100 cursor-pointer">
+              <input
+                type="radio"
+                name="exportFormat"
+                value="excel"
+                checked={exportFormat === 'excel'}
+                onChange={() => setExportFormat('excel')}
+                className="text-saffron-600 focus:ring-saffron-500"
+              />
+              <FileSpreadsheet size={14} className="text-leaf-600" />
+              Excel
+            </label>
+          </div>
+
+          {/* Generate / Export Button */}
           <Button
             variant="primary"
-            size="sm"
-            leftIcon={<Download size={15} />}
-            onClick={() => exportFinancialStatementPDF(collections, expenses)}
+            size="md"
+            leftIcon={exportFormat === 'pdf' ? <Download size={16} /> : <FileSpreadsheet size={16} />}
+            onClick={handleExecuteExport}
+            className="shadow-gold px-5 py-2.5 font-bold"
           >
-            Export PDF Audit
+            Export Report ({exportFormat.toUpperCase()})
           </Button>
         </div>
       </div>
 
-      {/* Segmented Sub-Tab Switcher */}
-      <div className="flex gap-2 p-1.5 rounded-2xl bg-cream-100 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 max-w-md">
-        <button
-          type="button"
-          onClick={() => setActiveTab('defaulters')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'defaulters'
-              ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm border border-cream-border dark:border-charcoal-600'
-              : 'text-charcoal-600 dark:text-charcoal-300 hover:text-charcoal-900 dark:hover:text-cream-50'
-          }`}
-        >
-          Outstanding Defaulters ({defaulters.length})
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('daily')}
-          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-            activeTab === 'daily'
-              ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm border border-cream-border dark:border-charcoal-600'
-              : 'text-charcoal-600 dark:text-charcoal-300 hover:text-charcoal-900 dark:hover:text-cream-50'
-          }`}
-        >
-          Daily Cashflow Ledger
-        </button>
+      {/* 3 Core Filter-Aware KPI Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-leaf-600 dark:text-leaf-400">
+            <span className="flex items-center gap-1.5">
+              <TrendingUp size={16} />
+              Total Inflows ({activePeriodLabel})
+            </span>
+            <Badge variant="success" size="sm">{filteredCollections.length} Entries</Badge>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-leaf-700 dark:text-leaf-300 mt-2 font-mono">
+            {formatCurrency(periodCollectionTotal)}
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-saffron-600 dark:text-gold-400">
+            <span className="flex items-center gap-1.5">
+              <CreditCard size={16} />
+              Total Expenses ({activePeriodLabel})
+            </span>
+            <Badge variant="warning" size="sm">{filteredExpenses.length} Vouchers</Badge>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-saffron-700 dark:text-gold-300 mt-2 font-mono">
+            {formatCurrency(periodExpenseTotal)}
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-charcoal-700 dark:text-cream-200">
+            <span className="flex items-center gap-1.5 text-gold-600 dark:text-gold-300">
+              <Wallet size={16} />
+              Period Balance
+            </span>
+            <Badge variant={periodNetBalance >= 0 ? 'success' : 'danger'} size="sm">
+              {periodNetBalance >= 0 ? 'Surplus' : 'Deficit'}
+            </Badge>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-charcoal-900 dark:text-cream-50 mt-2 font-mono">
+            {formatCurrency(periodNetBalance)}
+          </div>
+        </GlassCard>
       </div>
 
-      {/* Content Panels */}
-      {activeTab === 'defaulters' ? (
+      {/* Sonora-Style Filter Form Card */}
+      <GlassCard title="Report Criteria & Filter Options" className="p-5 bg-white dark:bg-charcoal-800">
+        <div className="space-y-4">
+          {/* Main Report Selection */}
+          <div>
+            <Select
+              label="Select a Report *"
+              value={reportType}
+              onChange={(e) => setReportType(e.target.value as ReportType)}
+              options={[
+                { label: '📊 1. Total Collection vs. Total Expenses & Balance Sheet', value: 'collection_vs_expense' },
+                { label: '🏷️ 2. Category-wise Expenses Breakdown', value: 'category_expenses' },
+                { label: '📅 3. Date / Month-wise Expenses Ledger', value: 'date_wise_expenses' },
+                { label: '📥 4. Payment & Collection Entries Register', value: 'collections_register' },
+                { label: '⚠️ 5. Outstanding Defaulters Recovery Report', value: 'defaulters' },
+              ]}
+            />
+          </div>
+
+          {/* Filter Grid: Date Preset, Custom Range, Category, Mode, Block, Search */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end pt-2 border-t border-cream-100 dark:border-charcoal-700">
+            {/* 1. Date Preset Filter */}
+            <div>
+              <Select
+                label="Date Period Filter"
+                value={datePreset}
+                onChange={(e) => setDatePreset(e.target.value as DateFilterPreset)}
+                options={[
+                  { label: '🌐 All Time (Full History)', value: 'all_time' },
+                  { label: '⚡ Today', value: 'today' },
+                  { label: '📆 This Week', value: 'this_week' },
+                  { label: '📅 This Month', value: 'this_month' },
+                  { label: '🗓️ Custom Date Range...', value: 'custom' },
+                ]}
+              />
+            </div>
+
+            {/* 2. Custom Date Range Pickers (Visible when 'custom' is selected) */}
+            {datePreset === 'custom' ? (
+              <>
+                <Input
+                  label="From Date (Start)"
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  icon={<Calendar size={15} />}
+                />
+                <Input
+                  label="To Date (End)"
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  icon={<Calendar size={15} />}
+                />
+              </>
+            ) : (
+              <>
+                {/* 3. Category Filter (for expense reports) */}
+                <div>
+                  <Select
+                    label="Expense Category"
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    disabled={reportType === 'defaulters' || reportType === 'collections_register'}
+                    options={availableCategories.map((c) => ({
+                      label: c === 'ALL' ? 'All Categories' : c,
+                      value: c,
+                    }))}
+                  />
+                </div>
+
+                {/* 4. Payment Mode Filter */}
+                <div>
+                  <Select
+                    label="Payment Mode"
+                    value={selectedPaymentMode}
+                    onChange={(e) => setSelectedPaymentMode(e.target.value)}
+                    disabled={reportType === 'defaulters'}
+                    options={[
+                      { label: 'All Payment Modes', value: 'ALL' },
+                      { label: '📱 UPI', value: 'UPI' },
+                      { label: '💵 Cash', value: 'Cash' },
+                      { label: '🏦 Bank Transfer', value: 'BankTransfer' },
+                      { label: '📑 Cheque', value: 'Cheque' },
+                    ]}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* 5. Tower / Block Filter */}
+            <div>
+              <Select
+                label="Tower / Block"
+                value={selectedBlock}
+                onChange={(e) => setSelectedBlock(e.target.value)}
+                options={availableBlocks.map((b) => ({
+                  label: b === 'ALL' ? 'All Towers / Blocks' : `🏢 ${b}`,
+                  value: b,
+                }))}
+              />
+            </div>
+
+            {/* 6. Keyword Search Input (When not taking custom date space) */}
+            {datePreset === 'custom' && (
+              <div>
+                <Select
+                  label="Expense Category"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  disabled={reportType === 'defaulters' || reportType === 'collections_register'}
+                  options={availableCategories.map((c) => ({
+                    label: c === 'ALL' ? 'All Categories' : c,
+                    value: c,
+                  }))}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Quick Search bar below filters */}
+          <div className="pt-2">
+            <Input
+              placeholder="Search keyword (resident name, description, vendor, receipt #)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              icon={<Search size={15} />}
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* Dynamic Data Table Output */}
+
+      {/* REPORT 1: Total Collection vs Total Expenses & Balance Sheet */}
+      {reportType === 'collection_vs_expense' && (
         <GlassCard
-          title={`Defaulters & Pending Recovery (${defaulters.length} Flats)`}
-          subtitle={`Total Unpaid Balance: ${formatCurrency(totalOutstanding)}`}
+          title={`Total Collection vs. Total Expenses Statement (${activePeriodLabel})`}
+          subtitle="Audit summary of income inflows, expense outflows, and net treasury balance"
+        >
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="bg-cream-100 dark:bg-charcoal-900 border-b border-cream-border dark:border-charcoal-700 text-charcoal-700 dark:text-charcoal-300 font-bold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th className="py-3.5 px-4">Financial Ledger Stream</th>
+                  <th className="py-3.5 px-4">Matching Entries</th>
+                  <th className="py-3.5 px-4 text-right">Amount (₹)</th>
+                  <th className="py-3.5 px-4 text-right">Transaction Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cream-border dark:divide-charcoal-700/60">
+                <tr className="hover:bg-cream-50/50 dark:hover:bg-charcoal-700/30">
+                  <td className="py-3.5 px-4 font-bold text-charcoal-900 dark:text-cream-50">
+                    Total Funds Collected (Flats, Sponsors, Stalls, Donations)
+                  </td>
+                  <td className="py-3.5 px-4 text-charcoal-600 dark:text-charcoal-300 font-medium">
+                    {filteredCollections.length} entries
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-base">
+                    +{formatCurrency(periodCollectionTotal)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <Badge variant="success" size="sm">Credit / Inflow</Badge>
+                  </td>
+                </tr>
+
+                <tr className="hover:bg-cream-50/50 dark:hover:bg-charcoal-700/30">
+                  <td className="py-3.5 px-4 font-bold text-charcoal-900 dark:text-cream-50">
+                    Total Society & Puja Expenses (Vouchers Payouts)
+                  </td>
+                  <td className="py-3.5 px-4 text-charcoal-600 dark:text-charcoal-300 font-medium">
+                    {filteredExpenses.length} vouchers
+                  </td>
+                  <td className="py-3.5 px-4 text-right font-extrabold text-maroon-700 dark:text-rose-400 font-mono text-base">
+                    -{formatCurrency(periodExpenseTotal)}
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <Badge variant="danger" size="sm">Debit / Outflow</Badge>
+                  </td>
+                </tr>
+
+                <tr className="bg-cream-50/80 dark:bg-charcoal-900 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
+                  <td className="py-4 px-4 text-charcoal-900 dark:text-cream-50 font-display text-sm">
+                    Net Available Period Treasury Balance
+                  </td>
+                  <td className="py-4 px-4 text-charcoal-600 dark:text-charcoal-300 font-normal">
+                    Period: {activePeriodLabel}
+                  </td>
+                  <td className="py-4 px-4 text-right font-extrabold text-lg font-mono text-charcoal-900 dark:text-cream-50">
+                    {formatCurrency(periodNetBalance)}
+                  </td>
+                  <td className="py-4 px-4 text-right">
+                    <Badge variant={periodNetBalance >= 0 ? 'success' : 'danger'} size="sm">
+                      {periodNetBalance >= 0 ? 'Surplus Balance' : 'Deficit'}
+                    </Badge>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* REPORT 2: Category-wise Expenses Breakdown */}
+      {reportType === 'category_expenses' && (
+        <GlassCard
+          title={`Category-wise Expense Distribution (${activePeriodLabel})`}
+          subtitle={`Total Outflows: ${formatCurrency(periodExpenseTotal)} across ${categoryStats.length} Categories`}
+        >
+          {isExpensesLoading ? (
+            <div className="text-xs text-charcoal-400 py-12 text-center">Loading category expenses…</div>
+          ) : categoryStats.length === 0 ? (
+            <div className="text-xs text-charcoal-400 py-12 text-center">No expense vouchers recorded for this period.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400 uppercase">
+                    <th className="py-3 px-3">Expense Category</th>
+                    <th className="py-3 px-3">Vouchers Count</th>
+                    <th className="py-3 px-3 text-right">Total Amount (₹)</th>
+                    <th className="py-3 px-3 text-right">Budget Share (%)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                  {categoryStats.map((c) => (
+                    <tr
+                      key={c.category}
+                      className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                    >
+                      <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50 flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-saffron-600" />
+                        {c.category}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-charcoal-600 dark:text-charcoal-300 font-medium">
+                        {c.count} voucher(s)
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-extrabold text-charcoal-900 dark:text-cream-50 font-mono text-sm">
+                        {formatCurrency(c.total)}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-bold text-saffron-700 dark:text-gold-400">
+                        {c.percentage}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </GlassCard>
+      )}
+
+      {/* REPORT 3: Date / Month-wise Expenses Ledger */}
+      {reportType === 'date_wise_expenses' && (
+        <GlassCard
+          title={`Detailed Expense Vouchers Ledger (${activePeriodLabel})`}
+          subtitle={`Showing ${filteredExpenses.length} entries (Total: ${formatCurrency(periodExpenseTotal)})`}
+        >
+          {isExpensesLoading ? (
+            <div className="text-xs text-charcoal-400 py-12 text-center">Loading expenses…</div>
+          ) : filteredExpenses.length === 0 ? (
+            <div className="text-xs text-charcoal-400 py-12 text-center">No matching expenses found for this filter.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                    <th className="py-3 px-3">Date</th>
+                    <th className="py-3 px-3">Category</th>
+                    <th className="py-3 px-3">Description & Remarks</th>
+                    <th className="py-3 px-3">Paid To / Vendor</th>
+                    <th className="py-3 px-3">Mode</th>
+                    <th className="py-3 px-3 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                  {filteredExpenses.map((e) => (
+                    <tr
+                      key={e.id}
+                      className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                    >
+                      <td className="py-3.5 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
+                        {formatDateTime(e.expenseDate)}
+                      </td>
+
+                      <td className="py-3.5 px-3">
+                        <span className="font-bold text-saffron-700 dark:text-gold-400 bg-saffron-50 dark:bg-saffron-950/40 px-2 py-0.5 rounded-lg border border-saffron-500/20">
+                          {e.category}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                        {e.description}
+                        {e.remarks && (
+                          <span className="block text-[11px] text-charcoal-400 font-normal mt-0.5">
+                            {e.remarks}
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-charcoal-700 dark:text-charcoal-300">
+                        {e.paidToVendor || '—'}
+                      </td>
+
+                      <td className="py-3.5 px-3">
+                        <Badge variant="neutral" size="sm">{e.paymentMode}</Badge>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-extrabold text-maroon-700 dark:text-rose-400 font-mono text-sm">
+                        {formatCurrency(e.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </GlassCard>
+      )}
+
+      {/* REPORT 4: Collection Entries Register */}
+      {reportType === 'collections_register' && (
+        <GlassCard
+          title={`Payment & Collections Register (${activePeriodLabel})`}
+          subtitle={`Showing ${filteredCollections.length} entries (Total: ${formatCurrency(periodCollectionTotal)})`}
+        >
+          {isCollectionsLoading ? (
+            <div className="text-xs text-charcoal-400 py-12 text-center">Loading collections…</div>
+          ) : filteredCollections.length === 0 ? (
+            <div className="text-xs text-charcoal-400 py-12 text-center">No matching collections found for this filter.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[700px]">
+                <thead>
+                  <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                    <th className="py-3 px-3">Receipt #</th>
+                    <th className="py-3 px-3">Date</th>
+                    <th className="py-3 px-3">Donor / Resident</th>
+                    <th className="py-3 px-3">Flat / Category</th>
+                    <th className="py-3 px-3">Mode</th>
+                    <th className="py-3 px-3 text-right">Amount (₹)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                  {filteredCollections.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                    >
+                      <td className="py-3.5 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
+                        {c.receiptNumber || `REC-${c.id}`}
+                      </td>
+
+                      <td className="py-3.5 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
+                        {formatDateTime(c.collectionDateTime)}
+                      </td>
+
+                      <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                        {c.donorResidentName || 'Resident'}
+                      </td>
+
+                      <td className="py-3.5 px-3 text-charcoal-700 dark:text-charcoal-300">
+                        {c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation')}
+                      </td>
+
+                      <td className="py-3.5 px-3">
+                        <Badge variant="neutral" size="sm">{c.mode}</Badge>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                        {formatCurrency(c.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </GlassCard>
+      )}
+
+      {/* REPORT 5: Outstanding Defaulters Recovery */}
+      {reportType === 'defaulters' && (
+        <GlassCard
+          title={`Outstanding Defaulters Recovery (${filteredDefaulters.length} Flats)`}
+          subtitle={`Total Unpaid Balance: ${formatCurrency(filteredDefaulters.reduce((s, d) => s + d.pendingAmount, 0))}`}
         >
           {isDefaultersLoading ? (
             <div className="text-xs text-charcoal-400 py-12 text-center">Loading defaulters list…</div>
-          ) : defaulters.length === 0 ? (
+          ) : filteredDefaulters.length === 0 ? (
             <div className="py-12 text-center space-y-2">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-leaf-500/15 text-leaf-600">
                 <CheckCircle2 size={28} />
@@ -133,14 +843,13 @@ export const ReportsPage: React.FC = () => {
                     <th className="py-3 px-3">Flat & Tower</th>
                     <th className="py-3 px-3">Resident / Owner</th>
                     <th className="py-3 px-3">Phone</th>
-                    <th className="py-3 px-3 text-right">Target</th>
-                    <th className="py-3 px-3 text-right">Paid</th>
-                    <th className="py-3 px-3 text-right">Pending Due</th>
-                    <th className="py-3 px-3 text-center">WhatsApp Reminder</th>
+                    <th className="py-3 px-3 text-right">Target (₹)</th>
+                    <th className="py-3 px-3 text-right">Paid (₹)</th>
+                    <th className="py-3 px-3 text-right">Pending Due (₹)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {defaulters.map((d) => (
+                  {filteredDefaulters.map((d) => (
                     <tr
                       key={d.flatId}
                       className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -167,92 +876,6 @@ export const ReportsPage: React.FC = () => {
 
                       <td className="py-3.5 px-3 text-right font-extrabold text-maroon-700 dark:text-rose-400 text-sm">
                         {formatCurrency(d.pendingAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-center">
-                        {d.ownerPhone ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            leftIcon={<Share2 size={13} />}
-                            className="text-leaf-700 border-leaf-500/30 hover:bg-leaf-500/10"
-                            onClick={() =>
-                              handleWhatsAppReminder(
-                                d.ownerPhone,
-                                d.ownerName,
-                                d.pendingAmount,
-                                d.block,
-                                d.flatNumber
-                              )
-                            }
-                          >
-                            Send Reminder
-                          </Button>
-                        ) : (
-                          <span className="text-[11px] text-charcoal-400 italic">No mobile</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </GlassCard>
-      ) : (
-        <GlassCard
-          title="Daily Cashflow Statements"
-          subtitle="Daily net summary of collections and expense payouts"
-        >
-          {isDailyLoading ? (
-            <div className="text-xs text-charcoal-400 py-12 text-center">Loading daily statements…</div>
-          ) : dailyReports.length === 0 ? (
-            <div className="text-xs text-charcoal-400 py-12 text-center">No cashflow logs recorded.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[650px]">
-                <thead>
-                  <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                    <th className="py-3 px-3">Date</th>
-                    <th className="py-3 px-3 text-right">Collections Count</th>
-                    <th className="py-3 px-3 text-right">Total Inflow (+)</th>
-                    <th className="py-3 px-3 text-right">Expenses Outflow (-)</th>
-                    <th className="py-3 px-3 text-right">Net Daily Change</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {dailyReports.map((row) => (
-                    <tr
-                      key={row.date}
-                      className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
-                    >
-                      <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
-                        {row.date}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right text-charcoal-600 dark:text-charcoal-400 font-medium">
-                        {row.collectionsCount} entries
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-bold text-leaf-700 dark:text-leaf-400">
-                        +{formatCurrency(row.collectionsAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-bold text-maroon-700 dark:text-rose-400">
-                        -{formatCurrency(row.expensesAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-extrabold text-sm">
-                        <span
-                          className={
-                            row.netChange >= 0
-                              ? 'text-leaf-700 dark:text-leaf-400'
-                              : 'text-maroon-700 dark:text-rose-400'
-                          }
-                        >
-                          {row.netChange >= 0 ? '+' : ''}
-                          {formatCurrency(row.netChange)}
-                        </span>
                       </td>
                     </tr>
                   ))}

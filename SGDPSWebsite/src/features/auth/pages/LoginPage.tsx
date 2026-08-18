@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch } from '../../../hooks/useAppDispatch';
+import { useAppSelector } from '../../../hooks/useAppSelector';
 import {
   useLoginMutation,
   useRegisterMutation,
@@ -15,7 +16,6 @@ import {
   Lock,
   Mail,
   Flame,
-  ShieldCheck,
   ArrowRight,
   User,
   CheckCircle2,
@@ -26,6 +26,19 @@ type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
 
 export const LoginPage: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>('login');
+
+  const { isAuthenticated, token, user } = useAppSelector((state) => state.auth);
+  const storedToken = localStorage.getItem('sgdps_token');
+  const storedUser = localStorage.getItem('sgdps_user');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+    const hasAdminRole = user?.roles?.includes('Admin') || parsedUser?.roles?.includes('Admin');
+    if ((isAuthenticated || storedToken || token) && hasAdminRole) {
+      navigate('/');
+    }
+  }, [isAuthenticated, storedToken, token, user, storedUser, navigate]);
 
   // Form Fields
   const [email, setEmail] = useState('');
@@ -45,7 +58,6 @@ export const LoginPage: React.FC = () => {
   const [resetPassword, { isLoading: isResetting }] = useResetPasswordMutation();
 
   const dispatch = useAppDispatch();
-  const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +66,16 @@ export const LoginPage: React.FC = () => {
 
     try {
       const response = await login({ email, password }).unwrap();
+
+      // Enforce Admin Only Access on Web Portal
+      const isAdmin = response.user.roles && response.user.roles.includes('Admin');
+      if (!isAdmin) {
+        setErrorMsg(
+          'Access Denied: Field Collector accounts can only access the SGDPS Mobile App. Only Admin accounts can log into this Web Portal.'
+        );
+        return;
+      }
+
       dispatch(
         setCredentials({
           user: response.user,
@@ -84,7 +106,7 @@ export const LoginPage: React.FC = () => {
         role: 'Admin', // Admin & Treasury access for web users
       }).unwrap();
 
-      // Automatically log the new user in
+      // Automatically log the new admin user in
       const response = await login({ email, password }).unwrap();
       dispatch(
         setCredentials({
@@ -145,19 +167,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const setDemoCredentials = (role: 'Admin' | 'Collector') => {
-    if (role === 'Admin') {
-      setEmail('admin@sgdps.com');
-      setPassword('Admin@123');
-    } else {
-      setEmail('collector@sgdps.com');
-      setPassword('Collector@123');
-    }
-    setMode('login');
-    setErrorMsg('');
-    setSuccessMsg('');
-  };
-
   return (
     <div className="relative min-h-screen flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 bg-[#FAF6EE] dark:bg-[#120B08] bg-mandala-pattern transition-colors duration-300 overflow-hidden">
       {/* Ambient Saffron & Gold Glows */}
@@ -182,20 +191,22 @@ export const LoginPage: React.FC = () => {
         </p>
       </div>
 
-      <div className="relative z-10 sm:mx-auto sm:w-full sm:max-w-md w-full">
-        <div className="rounded-3xl border border-cream-border dark:border-charcoal-700 bg-white dark:bg-charcoal-800 p-7 sm:p-8 shadow-festive dark:shadow-festive-dark space-y-5">
-          {/* Mode Switcher Tabs */}
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-cream-100 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs font-bold">
+      {/* Auth Card */}
+      <div className="relative z-10 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white/80 dark:bg-charcoal-800/80 backdrop-blur-xl border border-cream-border dark:border-charcoal-700 py-8 px-6 sm:px-8 rounded-3xl shadow-xl space-y-6">
+          {/* Segmented Mode Switcher */}
+          <div className="grid grid-cols-3 gap-1 p-1 bg-cream-100 dark:bg-charcoal-900 rounded-2xl border border-cream-border dark:border-charcoal-700">
             <button
               type="button"
               onClick={() => {
                 setMode('login');
                 setErrorMsg('');
+                setSuccessMsg('');
               }}
-              className={`py-2 rounded-xl transition-all ${
+              className={`py-2 text-xs font-bold rounded-xl transition-all ${
                 mode === 'login'
-                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm border border-cream-border dark:border-charcoal-600'
-                  : 'text-charcoal-600 dark:text-charcoal-300 hover:text-charcoal-900 dark:hover:text-cream-50'
+                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
+                  : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
               }`}
             >
               Sign In
@@ -205,11 +216,12 @@ export const LoginPage: React.FC = () => {
               onClick={() => {
                 setMode('register');
                 setErrorMsg('');
+                setSuccessMsg('');
               }}
-              className={`py-2 rounded-xl transition-all ${
+              className={`py-2 text-xs font-bold rounded-xl transition-all ${
                 mode === 'register'
-                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm border border-cream-border dark:border-charcoal-600'
-                  : 'text-charcoal-600 dark:text-charcoal-300 hover:text-charcoal-900 dark:hover:text-cream-50'
+                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
+                  : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
               }`}
             >
               New Admin
@@ -219,11 +231,12 @@ export const LoginPage: React.FC = () => {
               onClick={() => {
                 setMode('forgot');
                 setErrorMsg('');
+                setSuccessMsg('');
               }}
-              className={`py-2 rounded-xl transition-all ${
+              className={`py-2 text-xs font-bold rounded-xl transition-all ${
                 mode === 'forgot' || mode === 'reset'
-                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm border border-cream-border dark:border-charcoal-600'
-                  : 'text-charcoal-600 dark:text-charcoal-300 hover:text-charcoal-900 dark:hover:text-cream-50'
+                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
+                  : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
               }`}
             >
               Reset Pass
@@ -232,14 +245,15 @@ export const LoginPage: React.FC = () => {
 
           {/* Feedback Alerts */}
           {errorMsg && (
-            <div className="p-3.5 bg-maroon-50 dark:bg-maroon-950/40 border border-maroon-600/30 text-maroon-700 dark:text-rose-400 text-xs rounded-xl font-medium animate-in fade-in">
-              {errorMsg}
+            <div className="p-3.5 rounded-xl bg-maroon-500/10 border border-maroon-500/30 text-maroon-700 dark:text-rose-400 text-xs flex items-start gap-2 animate-in fade-in">
+              <span className="font-bold">⚠️</span>
+              <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3.5 bg-leaf-50 dark:bg-leaf-950/40 border border-leaf-600/30 text-leaf-700 dark:text-leaf-300 text-xs rounded-xl font-medium animate-in fade-in flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-leaf-600 flex-shrink-0" />
+            <div className="p-3.5 rounded-xl bg-leaf-500/10 border border-leaf-500/30 text-leaf-700 dark:text-leaf-300 text-xs flex items-start gap-2 animate-in fade-in">
+              <CheckCircle2 size={16} className="text-leaf-600 flex-shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </div>
           )}
@@ -248,11 +262,10 @@ export const LoginPage: React.FC = () => {
           {mode === 'login' && (
             <form className="space-y-4" onSubmit={handleLogin}>
               <Input
-                label="Email Address"
+                label="Email Address *"
                 type="email"
                 required
-                autoFocus
-                icon={<Mail size={16} />}
+                icon={<Mail size={15} />}
                 placeholder="admin@sgdps.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -260,10 +273,10 @@ export const LoginPage: React.FC = () => {
 
               <div>
                 <Input
-                  label="Password"
+                  label="Password *"
                   type="password"
                   required
-                  icon={<Lock size={16} />}
+                  icon={<Lock size={15} />}
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -275,7 +288,7 @@ export const LoginPage: React.FC = () => {
                       setMode('forgot');
                       setErrorMsg('');
                     }}
-                    className="text-[11px] font-bold text-saffron-600 dark:text-gold-400 hover:underline"
+                    className="text-xs font-bold text-saffron-600 dark:text-gold-400 hover:underline"
                   >
                     Forgot Password?
                   </button>
@@ -294,30 +307,29 @@ export const LoginPage: React.FC = () => {
             </form>
           )}
 
-          {/* 2. Admin Self-Registration Form */}
+          {/* 2. New Admin Registration Form */}
           {mode === 'register' && (
             <form className="space-y-3.5" onSubmit={handleRegister}>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <Input
                   label="First Name *"
                   required
-                  autoFocus
                   icon={<User size={15} />}
-                  placeholder="Rajesh"
+                  placeholder="Amit"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
                 />
                 <Input
                   label="Last Name *"
                   required
-                  placeholder="Mukherjee"
+                  placeholder="Chatterjee"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
                 />
               </div>
 
               <Input
-                label="Email Address *"
+                label="Official Email *"
                 type="email"
                 required
                 icon={<Mail size={15} />}
@@ -331,23 +343,23 @@ export const LoginPage: React.FC = () => {
                 type="password"
                 required
                 icon={<Lock size={15} />}
-                placeholder="••••••••"
+                placeholder="Minimum 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
 
-              <div className="p-2.5 rounded-xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-[11px] text-charcoal-600 dark:text-cream-300">
-                ⭐ Grants full <strong>Admin & Treasurer</strong> permissions to manage collections, expenses, and residents.
+              <div className="p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-[11px] text-gold-800 dark:text-gold-300">
+                ⭐ Registering here assigns full <strong>Admin & Treasury Management</strong> access to this web portal.
               </div>
 
               <Button
                 type="submit"
                 variant="primary"
-                className="w-full py-3 text-sm font-bold mt-1"
+                className="w-full py-3 text-sm font-bold"
                 isLoading={isRegistering}
                 rightIcon={<ArrowRight size={16} />}
               >
-                Create Admin Account
+                Register & Access Portal
               </Button>
             </form>
           )}
@@ -355,16 +367,15 @@ export const LoginPage: React.FC = () => {
           {/* 3. Forgot Password Form */}
           {mode === 'forgot' && (
             <form className="space-y-4" onSubmit={handleForgotPassword}>
-              <p className="text-xs text-charcoal-600 dark:text-cream-300">
-                Enter your registered email address to receive your password reset token.
+              <p className="text-xs text-charcoal-500 dark:text-charcoal-400">
+                Enter your registered admin email address to receive password recovery instructions.
               </p>
 
               <Input
-                label="Registered Email Address"
+                label="Registered Email *"
                 type="email"
                 required
-                autoFocus
-                icon={<Mail size={16} />}
+                icon={<Mail size={15} />}
                 placeholder="admin@sgdps.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -375,18 +386,18 @@ export const LoginPage: React.FC = () => {
                 variant="primary"
                 className="w-full py-3 text-sm font-bold"
                 isLoading={isSendingReset}
-                rightIcon={<ArrowRight size={16} />}
+                rightIcon={<KeyRound size={16} />}
               >
-                Send Reset Token
+                Send Password Reset Token
               </Button>
 
-              <div className="text-center pt-1">
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={() => setMode('reset')}
-                  className="text-xs font-bold text-saffron-600 dark:text-gold-400 hover:underline"
+                  className="text-xs text-saffron-600 dark:text-gold-400 font-bold hover:underline"
                 >
-                  Already have a reset token? Click here
+                  Already have a reset token? Enter it here →
                 </button>
               </div>
             </form>
@@ -436,36 +447,6 @@ export const LoginPage: React.FC = () => {
               </Button>
             </form>
           )}
-
-          {/* Quick Demo Credentials (Unified 2-Role Structure) */}
-          <div className="pt-4 border-t border-cream-100 dark:border-charcoal-700">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-charcoal-400 uppercase tracking-wider mb-2.5">
-              <ShieldCheck size={13} className="text-gold-600" />
-              Quick Demo Logins
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('Admin')}
-                className="py-2.5 px-3 bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 hover:border-gold-500 rounded-xl text-left transition-all hover:scale-[1.02]"
-              >
-                <div className="text-xs font-bold text-saffron-700 dark:text-gold-400">
-                  Admin & Treasurer
-                </div>
-                <div className="text-[10px] text-charcoal-400">Web Portal Manager</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('Collector')}
-                className="py-2.5 px-3 bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 hover:border-leaf-600 rounded-xl text-left transition-all hover:scale-[1.02]"
-              >
-                <div className="text-xs font-bold text-leaf-700 dark:text-leaf-400">
-                  Field Collector
-                </div>
-                <div className="text-[10px] text-charcoal-400">Mobile Field App</div>
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

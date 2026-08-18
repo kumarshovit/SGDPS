@@ -25,11 +25,11 @@ export const exportToPdf = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(255, 255, 255);
-  doc.text('SGDPS - Financial & Collection Report', 14, 15);
+  doc.text('SGDPS - Society & Puja Financial Ledger', 14, 15);
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, 14, 21);
+  doc.text(`Audit Date: ${new Date().toLocaleString('en-IN')}`, 14, 21);
 
   // Subtitle
   doc.setFontSize(13);
@@ -81,10 +81,20 @@ export const exportExpensesToExcel = (expenses: any[]) => {
     Description: e.description,
     'Amount (Rs)': e.amount,
     'Payment Mode': e.paymentMode,
-    Vendor: e.vendor || '',
+    Vendor: e.paidToVendor || '',
     Remarks: e.remarks || '',
   }));
   exportToExcel(data, 'SGDPS_Expenses_Ledger');
+};
+
+export const exportCategoryExpensesToExcel = (categories: { category: string; count: number; total: number; percentage: number }[]) => {
+  const data = categories.map((c) => ({
+    'Expense Category': c.category,
+    'Vouchers Logged': c.count,
+    'Total Amount (Rs)': c.total,
+    'Budget Share (%)': `${c.percentage}%`,
+  }));
+  exportToExcel(data, 'SGDPS_Category_Expenses_Summary');
 };
 
 export const exportDefaultersToExcel = (defaulters: any[]) => {
@@ -95,10 +105,21 @@ export const exportDefaultersToExcel = (defaulters: any[]) => {
     Resident: d.ownerName,
     Phone: d.ownerPhone,
     'Expected Target (Rs)': d.expectedAmount,
-    'Total Paid (Rs)': d.totalPaid,
+    'Total Paid (Rs)': d.paidAmount,
     'Outstanding Due (Rs)': d.pendingAmount,
   }));
   exportToExcel(data, 'SGDPS_Pending_Defaulters');
+};
+
+export const exportDateWiseReportToExcel = (dailyReports: any[]) => {
+  const data = dailyReports.map((d) => ({
+    Date: d.date,
+    'Collections Count': d.collectionsCount,
+    'Total Inflow (Rs)': d.collectionsAmount,
+    'Expenses Outflow (Rs)': d.expensesAmount,
+    'Net Change (Rs)': d.netChange,
+  }));
+  exportToExcel(data, 'SGDPS_Daily_Cashflow_Report');
 };
 
 export const exportFinancialStatementPDF = (collections: any[], expenses: any[]) => {
@@ -107,10 +128,12 @@ export const exportFinancialStatementPDF = (collections: any[], expenses: any[])
   const balance = totalCollections - totalExpenses;
 
   const rows = [
-    ['Total Collections (Income)', formatCurrency(totalCollections)],
-    ['Total Expenses (Vouchers)', formatCurrency(totalExpenses)],
-    ['Net Available Balance', formatCurrency(balance)],
+    ['Total Collections (Inflows)', formatCurrency(totalCollections)],
+    ['Total Expenses (Outflows)', formatCurrency(totalExpenses)],
+    ['Net Available Treasury Balance', formatCurrency(balance)],
+    ['Total Collection Entries Logged', collections.length.toString()],
+    ['Total Expense Vouchers Logged', expenses.length.toString()],
   ];
 
-  exportToPdf('Financial Balance Audit Statement', ['Item', 'Amount'], rows, 'SGDPS_Financial_Summary');
+  exportToPdf('Comprehensive Financial Balance Statement', ['Audit Item', 'Amount / Value'], rows, 'SGDPS_Financial_Audit_Statement');
 };
