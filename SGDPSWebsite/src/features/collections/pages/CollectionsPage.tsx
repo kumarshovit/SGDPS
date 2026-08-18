@@ -3,7 +3,7 @@ import {
   useGetCollectionsQuery,
   useDeleteCollectionMutation,
 } from '../api/collectionApiSlice';
-import { formatCurrency, formatDateTime } from '../../../utils/formatters';
+import { formatCurrency, formatDateTime, parseDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -62,10 +62,16 @@ export const CollectionsPage: React.FC = () => {
     return true;
   });
 
-  const totalFilteredAmount = filtered.reduce((s, e) => s + (e.amount || 0), 0);
+  const sortedFiltered = [...filtered].sort((a, b) => {
+    const timeA = parseDateTime(a.collectionDateTime || a.createdAt)?.getTime() || 0;
+    const timeB = parseDateTime(b.collectionDateTime || b.createdAt)?.getTime() || 0;
+    return timeB - timeA;
+  });
+
+  const totalFilteredAmount = sortedFiltered.reduce((s, e) => s + (e.amount || 0), 0);
 
   const handleExportExcel = () => {
-    const data = filtered.map((c) => ({
+    const data = sortedFiltered.map((c) => ({
       'Receipt No': c.receiptNumber,
       Type: c.type,
       'Block / Unit': c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : c.category,
@@ -192,14 +198,14 @@ export const CollectionsPage: React.FC = () => {
                     Loading collections ledger…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : sortedFiltered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-charcoal-400">
                     No collection entries match your filters.
                   </td>
                 </tr>
               ) : (
-                filtered.map((c) => (
+                sortedFiltered.map((c) => (
                   <tr
                     key={c.id}
                     className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"

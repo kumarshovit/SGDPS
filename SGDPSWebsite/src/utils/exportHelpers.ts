@@ -65,11 +65,9 @@ export const exportFlatsToExcel = (flats: any[]) => {
     Floor: f.floor,
     'Flat No': f.flatNumber,
     'Resident / Owner': f.ownerName,
-    Phone: f.ownerPhone,
-    'Expected (Rs)': f.expectedAmount,
-    'Collected (Rs)': f.totalCollected,
-    'Pending (Rs)': f.pendingAmount,
-    Status: f.paymentStatus,
+    Phone: f.ownerPhone || '',
+    'Collected (Rs)': f.totalCollected || 0,
+    Status: f.paymentStatus === 'Paid' || (f.totalCollected || 0) > 0 ? 'Paid' : 'Unpaid',
   }));
   exportToExcel(data, 'SGDPS_Flats_Master');
 };
@@ -103,12 +101,10 @@ export const exportDefaultersToExcel = (defaulters: any[]) => {
     Floor: d.floor,
     'Flat No': d.flatNumber,
     Resident: d.ownerName,
-    Phone: d.ownerPhone,
-    'Expected Target (Rs)': d.expectedAmount,
-    'Total Paid (Rs)': d.paidAmount,
-    'Outstanding Due (Rs)': d.pendingAmount,
+    Phone: d.ownerPhone || '',
+    Status: 'Unpaid',
   }));
-  exportToExcel(data, 'SGDPS_Pending_Defaulters');
+  exportToExcel(data, 'SGDPS_Unpaid_Flats');
 };
 
 export const exportDateWiseReportToExcel = (dailyReports: any[]) => {

@@ -82,10 +82,8 @@ public class ListFlatsEndpoint(AppDbContext db) : EndpointWithoutRequest<Results
     var result = flats.Select(f =>
     {
       var collected = collections.TryGetValue(f.Id, out var sum) ? sum : 0m;
-      var pending = Math.Max(0m, f.ExpectedAmount - collected);
-      var status = collected >= f.ExpectedAmount && f.ExpectedAmount > 0 ? "Paid"
-                 : collected > 0 ? "PartiallyPaid"
-                 : "Pending";
+      var pending = 0m;
+      var status = collected > 0 ? "Paid" : "Unpaid";
 
       return new FlatDto(
         f.Id,
@@ -151,9 +149,7 @@ public class GetBlockGridSummaryEndpoint(AppDbContext db) : EndpointWithoutReque
           var collected = collections.TryGetValue(flat.Id, out var amt) ? amt : 0m;
           blockCollected += collected;
           blockExpected += flat.ExpectedAmount;
-          var status = collected >= flat.ExpectedAmount && flat.ExpectedAmount > 0 ? "Paid"
-                     : collected > 0 ? "PartiallyPaid"
-                     : "Pending";
+          var status = collected > 0 ? "Paid" : "Unpaid";
 
           if (status == "Paid") paidCount++;
 
@@ -222,8 +218,8 @@ public class CreateFlatEndpoint(AppDbContext db) : Endpoint<CreateFlatRequest, R
       flat.Email,
       flat.ExpectedAmount,
       0m,
-      flat.ExpectedAmount,
-      "Pending",
+      0m,
+      "Unpaid",
       flat.IsActive,
       flat.CreatedAt);
 
@@ -235,7 +231,7 @@ public record CreateBlockRequest(
   string BlockName,
   int Floors = 9,
   int FlatsPerFloor = 7,
-  decimal ExpectedAmount = 2500);
+  decimal ExpectedAmount = 0);
 
 // POST /api/flats/create-block
 public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest, Results<Ok<List<FlatDto>>, ProblemHttpResult>>
@@ -268,8 +264,8 @@ public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBloc
           f.Email,
           f.ExpectedAmount,
           0m,
-          f.ExpectedAmount,
-          "Pending",
+          0m,
+          "Unpaid",
           f.IsActive,
           f.CreatedAt))
         .ToList();
@@ -312,8 +308,8 @@ public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBloc
       f.Email,
       f.ExpectedAmount,
       0m,
-      f.ExpectedAmount,
-      "Pending",
+      0m,
+      "Unpaid",
       f.IsActive,
       f.CreatedAt)).ToList();
 
@@ -352,10 +348,8 @@ public class UpdateFlatEndpoint(AppDbContext db) : Endpoint<UpdateFlatRequest, R
       .Where(c => c.FlatId == flat.Id && c.Type == CollectionType.ResidentBlock)
       .SumAsync(c => (decimal?)c.Amount, ct) ?? 0m;
 
-    var pending = Math.Max(0m, flat.ExpectedAmount - totalCollected);
-    var status = totalCollected >= flat.ExpectedAmount && flat.ExpectedAmount > 0 ? "Paid"
-               : totalCollected > 0 ? "PartiallyPaid"
-               : "Pending";
+    var pending = 0m;
+    var status = totalCollected > 0 ? "Paid" : "Unpaid";
 
     return TypedResults.Ok(new FlatDto(
       flat.Id,

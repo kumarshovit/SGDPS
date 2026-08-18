@@ -6,10 +6,10 @@ export interface Flat {
   ownerName: string;
   ownerPhone: string;
   email?: string;
-  expectedAmount: number;
+  expectedAmount?: number;
   totalCollected: number;
-  pendingAmount: number;
-  paymentStatus: 'Paid' | 'PartiallyPaid' | 'Pending';
+  pendingAmount?: number;
+  paymentStatus: 'Paid' | 'Unpaid' | 'Pending';
   isActive: boolean;
   createdAt: string;
 }
@@ -20,9 +20,9 @@ export interface FlatGridCell {
   floor: number;
   flatNumber: string;
   ownerName: string;
-  expectedAmount: number;
+  expectedAmount?: number;
   collectedAmount: number;
-  status: 'Paid' | 'PartiallyPaid' | 'Pending';
+  status: 'Paid' | 'Unpaid' | 'Pending';
 }
 
 export interface BlockGridSummary {
@@ -41,7 +41,7 @@ export interface CreateFlatInput {
   ownerName: string;
   ownerPhone: string;
   email?: string;
-  expectedAmount: number;
+  expectedAmount?: number;
 }
 
 export interface UpdateFlatInput extends CreateFlatInput {

@@ -70,9 +70,9 @@ export const FlatMasterPage: React.FC = () => {
 
   // Flat Statistics
   const totalFlats = flats.length;
-  const paidFlats = flats.filter((f) => f.paymentStatus === 'Paid').length;
-  const partialFlats = flats.filter((f) => f.paymentStatus === 'PartiallyPaid').length;
-  const pendingFlats = flats.filter((f) => f.paymentStatus === 'Pending').length;
+  const paidFlats = flats.filter((f) => f.paymentStatus === 'Paid' || (f.totalCollected || 0) > 0).length;
+  const unpaidFlats = flats.filter((f) => f.paymentStatus !== 'Paid' && (f.totalCollected || 0) === 0).length;
+  const totalCollectedFromFlats = flats.reduce((s, f) => s + (f.totalCollected || 0), 0);
 
   const handleOpenAddBlockModal = () => {
     setBlockNameToCreate('');
@@ -131,7 +131,7 @@ export const FlatMasterPage: React.FC = () => {
         flatNumber: editFlatNumber.trim(),
         ownerName: editOwnerName.trim(),
         ownerPhone: editOwnerPhone.trim(),
-        expectedAmount: editingFlat.expectedAmount,
+        expectedAmount: editingFlat.expectedAmount || 0,
         isActive: editingFlat.isActive,
       }).unwrap();
 
@@ -187,16 +187,16 @@ export const FlatMasterPage: React.FC = () => {
           <div className="text-2xl font-bold text-charcoal-900 dark:text-cream-50 mt-1 font-display">{totalFlats}</div>
         </GlassCard>
         <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="text-xs text-leaf-600 dark:text-leaf-400 font-bold uppercase tracking-wider">Full Paid</div>
+          <div className="text-xs text-leaf-600 dark:text-leaf-400 font-bold uppercase tracking-wider">Paid Units</div>
           <div className="text-2xl font-bold text-leaf-700 dark:text-leaf-300 mt-1 font-display">{paidFlats}</div>
         </GlassCard>
         <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="text-xs text-gold-600 dark:text-gold-400 font-bold uppercase tracking-wider">Partially Paid</div>
-          <div className="text-2xl font-bold text-gold-700 dark:text-gold-300 mt-1 font-display">{partialFlats}</div>
+          <div className="text-xs text-maroon-600 dark:text-maroon-400 font-bold uppercase tracking-wider">Unpaid Units</div>
+          <div className="text-2xl font-bold text-maroon-700 dark:text-rose-400 mt-1 font-display">{unpaidFlats}</div>
         </GlassCard>
         <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="text-xs text-maroon-600 dark:text-maroon-400 font-bold uppercase tracking-wider">Pending Units</div>
-          <div className="text-2xl font-bold text-maroon-700 dark:text-rose-400 mt-1 font-display">{pendingFlats}</div>
+          <div className="text-xs text-gold-600 dark:text-gold-400 font-bold uppercase tracking-wider">Total Collected</div>
+          <div className="text-2xl font-bold text-saffron-700 dark:text-gold-300 mt-1 font-display">{formatCurrency(totalCollectedFromFlats)}</div>
         </GlassCard>
       </div>
 
@@ -260,61 +260,54 @@ export const FlatMasterPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredFlats.map((flat) => (
-                  <tr
-                    key={flat.id}
-                    className="hover:bg-cream-50/80 dark:hover:bg-charcoal-700/40 transition-colors"
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-bold text-charcoal-900 dark:text-cream-50 font-display">
-                        {flat.block} · Flat {flat.flatNumber}
-                      </div>
-                      <div className="text-[11px] text-charcoal-400">{formatOrdinal(flat.floor)} Floor</div>
-                    </td>
-                    <td className="py-3.5 px-4 font-medium text-charcoal-800 dark:text-cream-100">
-                      {flat.ownerName}
-                    </td>
-                    <td className="py-3.5 px-4 text-charcoal-500 dark:text-charcoal-400 font-mono text-xs">
-                      {flat.ownerPhone || '—'}
-                    </td>
-                    <td className="py-3.5 px-4 font-bold text-leaf-700 dark:text-leaf-400 font-mono">
-                      {formatCurrency(flat.totalCollected || 0)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <Badge
-                        variant={
-                          flat.paymentStatus === 'Paid'
-                            ? 'success'
-                            : flat.paymentStatus === 'PartiallyPaid'
-                            ? 'warning'
-                            : 'danger'
-                        }
-                      >
-                        {flat.paymentStatus === 'PartiallyPaid'
-                          ? 'Partial'
-                          : flat.paymentStatus}
-                      </Badge>
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => handleOpenEditModal(flat)}
-                          className="p-1.5 rounded-lg hover:bg-cream-200 dark:hover:bg-charcoal-600 text-charcoal-600 dark:text-charcoal-300 transition-colors"
-                          title="Edit Resident Info"
-                        >
-                          <Edit2 size={15} />
-                        </button>
-                        <button
-                          onClick={() => setFlatToDelete(flat)}
-                          className="p-1.5 rounded-lg hover:bg-maroon-100 dark:hover:bg-maroon-900/40 text-maroon-700 dark:text-rose-400 transition-colors"
-                          title="Delete Flat"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filteredFlats.map((flat) => {
+                  const isPaid = flat.paymentStatus === 'Paid' || (flat.totalCollected || 0) > 0;
+                  return (
+                    <tr
+                      key={flat.id}
+                      className="hover:bg-cream-50/80 dark:hover:bg-charcoal-700/40 transition-colors"
+                    >
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-charcoal-900 dark:text-cream-50 font-display">
+                          {flat.block} · Flat {flat.flatNumber}
+                        </div>
+                        <div className="text-[11px] text-charcoal-400">{formatOrdinal(flat.floor)} Floor</div>
+                      </td>
+                      <td className="py-3.5 px-4 font-medium text-charcoal-800 dark:text-cream-100">
+                        {flat.ownerName}
+                      </td>
+                      <td className="py-3.5 px-4 text-charcoal-500 dark:text-charcoal-400 font-mono text-xs">
+                        {flat.ownerPhone || '—'}
+                      </td>
+                      <td className="py-3.5 px-4 font-bold text-leaf-700 dark:text-leaf-400 font-mono">
+                        {formatCurrency(flat.totalCollected || 0)}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <Badge variant={isPaid ? 'success' : 'danger'}>
+                          {isPaid ? 'Paid' : 'Unpaid'}
+                        </Badge>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEditModal(flat)}
+                            className="p-1.5 rounded-lg hover:bg-cream-200 dark:hover:bg-charcoal-600 text-charcoal-600 dark:text-charcoal-300 transition-colors"
+                            title="Edit Resident Info"
+                          >
+                            <Edit2 size={15} />
+                          </button>
+                          <button
+                            onClick={() => setFlatToDelete(flat)}
+                            className="p-1.5 rounded-lg hover:bg-maroon-100 dark:hover:bg-maroon-900/40 text-maroon-700 dark:text-rose-400 transition-colors"
+                            title="Delete Flat"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

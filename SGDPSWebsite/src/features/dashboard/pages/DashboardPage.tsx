@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useGetCollectionsQuery } from '../../collections/api/collectionApiSlice';
 import { useGetExpensesQuery } from '../../expenses/api/expenseApiSlice';
 import { Collection } from '../../collections/types';
-import { formatCurrency, formatDateTime } from '../../../utils/formatters';
+import { formatCurrency, formatDateTime, parseDateTime } from '../../../utils/formatters';
 import { StatCard } from '../../../components/ui/StatCard';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Badge } from '../../../components/ui/Badge';
@@ -35,8 +35,8 @@ export const DashboardPage: React.FC = () => {
     if (!dateStr) return false;
     if (dateFilter === 'all') return true;
 
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return true;
+    const d = parseDateTime(dateStr);
+    if (!d) return true;
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -90,9 +90,17 @@ export const DashboardPage: React.FC = () => {
   );
   const netBalance = totalCollected - totalExpense;
 
-  // Recent Collections remains overall latest 5 across the ledger
+  // Recent Collections remains overall latest 5 across the ledger (sorted by latest date-time)
   const recentCollections = useMemo(
-    () => (collections as Collection[]).slice(0, 5),
+    () => {
+      return [...(collections as Collection[])]
+        .sort((a, b) => {
+          const timeA = parseDateTime(a.collectionDateTime || a.createdAt)?.getTime() || 0;
+          const timeB = parseDateTime(b.collectionDateTime || b.createdAt)?.getTime() || 0;
+          return timeB - timeA;
+        })
+        .slice(0, 5);
+    },
     [collections]
   );
 

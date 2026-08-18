@@ -124,29 +124,31 @@ public class ListCollectionsEndpoint(AppDbContext db) : Endpoint<ListCollections
         (c.Remarks != null && c.Remarks.ToLower().Contains(s)));
     }
 
-    var list = await query
+    var items = await query
       .OrderByDescending(c => c.CollectionDateTime)
-      .Select(c => new CollectionDto(
-        c.Id,
-        c.Type.ToString(),
-        c.FlatId,
-        c.Block,
-        c.Floor,
-        c.FlatNumber,
-        c.Category,
-        c.DonorResidentName,
-        c.Amount,
-        c.Mode.ToString(),
-        c.ReceiptNumber ?? $"SGDPS-{c.Id:D6}",
-        c.TransactionReference,
-        c.CollectionDateTime,
-        c.Latitude,
-        c.Longitude,
-        c.CollectedByUserId,
-        c.CollectedByName,
-        c.Remarks,
-        c.CreatedAt))
+      .ThenByDescending(c => c.Id)
       .ToListAsync(ct);
+
+    var list = items.Select(c => new CollectionDto(
+      c.Id,
+      c.Type.ToString(),
+      c.FlatId,
+      c.Block,
+      c.Floor,
+      c.FlatNumber,
+      c.Category,
+      c.DonorResidentName,
+      c.Amount,
+      c.Mode.ToString(),
+      c.ReceiptNumber ?? $"SGDPS-{c.Id:D6}",
+      c.TransactionReference,
+      DateTime.SpecifyKind(c.CollectionDateTime, DateTimeKind.Utc),
+      c.Latitude,
+      c.Longitude,
+      c.CollectedByUserId,
+      c.CollectedByName,
+      c.Remarks,
+      DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc))).ToList();
 
     return TypedResults.Ok(list);
   }
@@ -181,13 +183,13 @@ public class GetCollectionByIdEndpoint(AppDbContext db) : EndpointWithoutRequest
       c.Mode.ToString(),
       c.ReceiptNumber ?? $"SGDPS-{c.Id:D6}",
       c.TransactionReference,
-      c.CollectionDateTime,
+      DateTime.SpecifyKind(c.CollectionDateTime, DateTimeKind.Utc),
       c.Latitude,
       c.Longitude,
       c.CollectedByUserId,
       c.CollectedByName,
       c.Remarks,
-      c.CreatedAt));
+      DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc)));
   }
 }
 
@@ -230,7 +232,13 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
     }
 
     var now = DateTime.UtcNow;
-    var receiptNum = $"REC-{now:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
+    var collectionTime = req.CollectionDateTime.HasValue
+      ? DateTime.SpecifyKind(req.CollectionDateTime.Value, DateTimeKind.Utc)
+      : now;
+
+    // Generate receipt date based on Indian Standard Time
+    var receiptDateStr = collectionTime.AddHours(5.5).ToString("yyyyMMdd");
+    var receiptNum = $"REC-{receiptDateStr}-{Guid.NewGuid().ToString("N")[..6].ToUpper()}";
 
     var collection = new PaymentCollection
     {
@@ -245,7 +253,7 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
       Mode = mode,
       ReceiptNumber = receiptNum,
       TransactionReference = req.TransactionReference,
-      CollectionDateTime = req.CollectionDateTime ?? now,
+      CollectionDateTime = collectionTime,
       Latitude = req.Latitude,
       Longitude = req.Longitude,
       CollectedByUserId = req.CollectedByUserId ?? "collector_1",
@@ -270,13 +278,13 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
       collection.Mode.ToString(),
       collection.ReceiptNumber,
       collection.TransactionReference,
-      collection.CollectionDateTime,
+      DateTime.SpecifyKind(collection.CollectionDateTime, DateTimeKind.Utc),
       collection.Latitude,
       collection.Longitude,
       collection.CollectedByUserId,
       collection.CollectedByName,
       collection.Remarks,
-      collection.CreatedAt);
+      DateTime.SpecifyKind(collection.CreatedAt, DateTimeKind.Utc));
 
     return TypedResults.Created($"/collections/{collection.Id}", dto);
   }
@@ -324,13 +332,13 @@ public class UpdateCollectionEndpoint(AppDbContext db) : Endpoint<UpdateCollecti
       c.Mode.ToString(),
       c.ReceiptNumber ?? $"SGDPS-{c.Id:D6}",
       c.TransactionReference,
-      c.CollectionDateTime,
+      DateTime.SpecifyKind(c.CollectionDateTime, DateTimeKind.Utc),
       c.Latitude,
       c.Longitude,
       c.CollectedByUserId,
       c.CollectedByName,
       c.Remarks,
-      c.CreatedAt));
+      DateTime.SpecifyKind(c.CreatedAt, DateTimeKind.Utc)));
   }
 }
 

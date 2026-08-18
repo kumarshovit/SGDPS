@@ -6,7 +6,7 @@ import {
 import { useGetCollectionsQuery } from '../../collections/api/collectionApiSlice';
 import { useGetExpensesQuery } from '../../expenses/api/expenseApiSlice';
 import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
-import { formatCurrency, formatDateTime, formatDate } from '../../../utils/formatters';
+import { formatCurrency, formatDateTime, formatDate, parseDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -68,8 +68,8 @@ export const ReportsPage: React.FC = () => {
     if (!dateStr) return true;
     if (datePreset === 'all_time') return true;
 
-    const target = new Date(dateStr);
-    if (isNaN(target.getTime())) return true;
+    const target = parseDateTime(dateStr);
+    if (!target) return true;
 
     const now = new Date();
 
@@ -289,15 +289,13 @@ export const ReportsPage: React.FC = () => {
           `${d.block} · Fl ${d.floor} · Flat ${d.flatNumber}`,
           d.ownerName,
           d.ownerPhone || '—',
-          formatCurrency(d.expectedAmount),
-          formatCurrency(d.paidAmount),
-          formatCurrency(d.pendingAmount),
+          'Unpaid',
         ]);
         exportToPdf(
-          `Outstanding Defaulters Recovery Statement`,
-          ['Flat & Tower', 'Resident', 'Phone', 'Target', 'Paid', 'Pending Due'],
+          `Unpaid Flats Statement (${dateLabel})`,
+          ['Flat & Tower', 'Resident', 'Phone', 'Status'],
           rows,
-          `SGDPS_Pending_Defaulters`
+          `SGDPS_Unpaid_Flats`
         );
       }
     } else {
@@ -404,7 +402,7 @@ export const ReportsPage: React.FC = () => {
                 { label: '🏷️ 2. Category-wise Expenses Breakdown', value: 'category_expenses' },
                 { label: '📅 3. Date / Month-wise Expenses Ledger', value: 'date_wise_expenses' },
                 { label: '📥 4. Payment & Collection Entries Register', value: 'collections_register' },
-                { label: '⚠️ 5. Outstanding Defaulters Recovery Report', value: 'defaulters' },
+                { label: '⚠️ 5. Unpaid / Pending Units Statement', value: 'defaulters' },
               ]}
             />
           </div>
@@ -774,35 +772,33 @@ export const ReportsPage: React.FC = () => {
         </GlassCard>
       )}
 
-      {/* REPORT 5: Outstanding Defaulters Recovery */}
+      {/* REPORT 5: Unpaid / Pending Flats Statement */}
       {reportType === 'defaulters' && (
         <GlassCard
-          title={`Outstanding Defaulters Recovery (${filteredDefaulters.length} Flats)`}
-          subtitle={`Total Unpaid Balance: ${formatCurrency(filteredDefaulters.reduce((s, d) => s + d.pendingAmount, 0))}`}
+          title={`Unpaid Flats Statement (${filteredDefaulters.length} Units)`}
+          subtitle={`Flats with zero recorded collection payments`}
         >
           {isDefaultersLoading ? (
-            <div className="text-xs text-charcoal-400 py-12 text-center">Loading defaulters list…</div>
+            <div className="text-xs text-charcoal-400 py-12 text-center">Loading unpaid flats list…</div>
           ) : filteredDefaulters.length === 0 ? (
             <div className="py-12 text-center space-y-2">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-leaf-500/15 text-leaf-600">
                 <CheckCircle2 size={28} />
               </div>
               <p className="text-sm font-bold text-charcoal-900 dark:text-cream-50">
-                All flat contributions are 100% cleared!
+                All flat contributions are 100% collected!
               </p>
-              <p className="text-xs text-charcoal-400">Zero outstanding dues across all residential towers.</p>
+              <p className="text-xs text-charcoal-400">Zero unpaid units across all residential towers.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+              <table className="w-full text-left border-collapse min-w-[600px]">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
                     <th className="py-3 px-3">Flat & Tower</th>
                     <th className="py-3 px-3">Resident / Owner</th>
                     <th className="py-3 px-3">Phone</th>
-                    <th className="py-3 px-3 text-right">Target (₹)</th>
-                    <th className="py-3 px-3 text-right">Paid (₹)</th>
-                    <th className="py-3 px-3 text-right">Pending Due (₹)</th>
+                    <th className="py-3 px-3 text-right">Payment Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
@@ -819,20 +815,12 @@ export const ReportsPage: React.FC = () => {
                         {d.ownerName}
                       </td>
 
-                      <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400">
-                        {d.ownerPhone || 'N/A'}
+                      <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400 font-mono">
+                        {d.ownerPhone || '—'}
                       </td>
 
-                      <td className="py-3.5 px-3 text-right text-charcoal-600 dark:text-charcoal-400 font-medium">
-                        {formatCurrency(d.expectedAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-bold text-leaf-700 dark:text-leaf-400">
-                        {formatCurrency(d.paidAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-extrabold text-maroon-700 dark:text-rose-400 text-sm">
-                        {formatCurrency(d.pendingAmount)}
+                      <td className="py-3.5 px-3 text-right">
+                        <Badge variant="danger">Unpaid</Badge>
                       </td>
                     </tr>
                   ))}

@@ -49,9 +49,10 @@ export const AddEntryPage: React.FC = () => {
   );
   const [referenceNo, setReferenceNo] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [collectionDate, setCollectionDate] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [collectionDate, setCollectionDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
 
   const [activeBlocks, setActiveBlocks] = useState<string[]>(() => getActiveBlocks());
   const [floorsPerBlock, setFloorsPerBlock] = useState<number>(() => getGlobalFloorsPerBlock());
@@ -186,6 +187,8 @@ export const AddEntryPage: React.FC = () => {
     setResidentName('');
     setReferenceNo('');
     setRemarks('');
+    const d = new Date();
+    setCollectionDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
   };
 
   return (
@@ -320,14 +323,12 @@ export const AddEntryPage: React.FC = () => {
                     </div>
                     <Badge
                       variant={
-                        matchedFlat.paymentStatus === 'Paid'
+                        matchedFlat.paymentStatus === 'Paid' || (matchedFlat.totalCollected || 0) > 0
                           ? 'success'
-                          : matchedFlat.paymentStatus === 'PartiallyPaid'
-                          ? 'warning'
                           : 'danger'
                       }
                     >
-                      Status: {matchedFlat.paymentStatus}
+                      Status: {matchedFlat.paymentStatus === 'Paid' || (matchedFlat.totalCollected || 0) > 0 ? 'Paid' : 'Unpaid'}
                     </Badge>
                   </div>
                 )}

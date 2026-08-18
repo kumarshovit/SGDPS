@@ -115,13 +115,13 @@ public class GetDashboardKpisEndpoint(AppDbContext db) : EndpointWithoutRequest<
       .OrderByDescending(e => e.Amount)
       .ToList();
 
-    // Flats paid count
+    // Flats paid count (flats with any contribution > 0)
     var flatPaidTotals = collections
       .Where(c => c.Type == CollectionType.ResidentBlock && c.FlatId.HasValue)
       .GroupBy(c => c.FlatId!.Value)
       .ToDictionary(g => g.Key, g => g.Sum(x => x.Amount));
 
-    int paidFlatsCount = flats.Count(f => flatPaidTotals.TryGetValue(f.Id, out var paid) && paid >= f.ExpectedAmount && f.ExpectedAmount > 0);
+    int paidFlatsCount = flats.Count(f => flatPaidTotals.TryGetValue(f.Id, out var paid) && paid > 0);
 
     // Recent Collections (Top 8)
     var recentCollections = collections
@@ -196,7 +196,7 @@ public class GetDefaultersEndpoint(AppDbContext db) : EndpointWithoutRequest<Res
     Get("/reports/defaulters");
     AllowAnonymous();
     Tags("Reports");
-    Summary(s => s.Summary = "Get list of pending/defaulter flats with dues calculation");
+    Summary(s => s.Summary = "Get list of unpaid flats (flats with zero collections)");
   }
 
   public override async Task<Results<Ok<List<DefaulterFlatDto>>, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
@@ -214,7 +214,7 @@ public class GetDefaultersEndpoint(AppDbContext db) : EndpointWithoutRequest<Res
     foreach (var flat in flats)
     {
       var paid = collections.TryGetValue(flat.Id, out var amt) ? amt : 0m;
-      if (paid < flat.ExpectedAmount)
+      if (paid == 0)
       {
         defaulters.Add(new DefaulterFlatDto(
           flat.Id,
@@ -223,9 +223,9 @@ public class GetDefaultersEndpoint(AppDbContext db) : EndpointWithoutRequest<Res
           flat.FlatNumber,
           flat.OwnerName,
           flat.OwnerPhone,
-          flat.ExpectedAmount,
-          paid,
-          flat.ExpectedAmount - paid));
+          0m,
+          0m,
+          0m));
       }
     }
 
