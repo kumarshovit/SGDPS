@@ -389,49 +389,6 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 3 Core Filter-Aware KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-leaf-600 dark:text-leaf-400">
-            <span className="flex items-center gap-1.5">
-              <TrendingUp size={16} />
-              Total Inflows ({activePeriodLabel})
-            </span>
-            <Badge variant="success" size="sm">{filteredCollections.length} Entries</Badge>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-leaf-700 dark:text-leaf-300 mt-2 font-mono">
-            {formatCurrency(periodCollectionTotal)}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-saffron-600 dark:text-gold-400">
-            <span className="flex items-center gap-1.5">
-              <CreditCard size={16} />
-              Total Expenses ({activePeriodLabel})
-            </span>
-            <Badge variant="warning" size="sm">{filteredExpenses.length} Vouchers</Badge>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-saffron-700 dark:text-gold-300 mt-2 font-mono">
-            {formatCurrency(periodExpenseTotal)}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-charcoal-700 dark:text-cream-200">
-            <span className="flex items-center gap-1.5 text-gold-600 dark:text-gold-300">
-              <Wallet size={16} />
-              Period Balance
-            </span>
-            <Badge variant={periodNetBalance >= 0 ? 'success' : 'danger'} size="sm">
-              {periodNetBalance >= 0 ? 'Surplus' : 'Deficit'}
-            </Badge>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-charcoal-900 dark:text-cream-50 mt-2 font-mono">
-            {formatCurrency(periodNetBalance)}
-          </div>
-        </GlassCard>
-      </div>
 
       {/* Sonora-Style Filter Form Card */}
       <GlassCard title="Report Criteria & Filter Options" className="p-5 bg-white dark:bg-charcoal-800">

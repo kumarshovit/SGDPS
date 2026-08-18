@@ -54,8 +54,6 @@ export const AddEntryPage: React.FC = () => {
   const [collectedByName, setCollectedByName] = useState(
     localStorage.getItem('sgdps_collector_name') || 'Admin'
   );
-  const [isCustomCollector, setIsCustomCollector] = useState(false);
-  const [customCollectorInput, setCustomCollectorInput] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
   const [remarks, setRemarks] = useState('');
   const [collectionDate, setCollectionDate] = useState(
@@ -91,11 +89,7 @@ export const AddEntryPage: React.FC = () => {
         value: name,
       };
     });
-    return [
-      defaultOption,
-      ...collectorList,
-      { label: '➕ + Enter Custom Collector Name...', value: '__CUSTOM_COLLECTOR__' },
-    ];
+    return [defaultOption, ...collectorList];
   }, [collectors]);
 
   // Dynamic available blocks combining defaults, loaded flats, and user additions
@@ -166,37 +160,12 @@ export const AddEntryPage: React.FC = () => {
     }
   };
 
-  const handleCollectorSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (val === '__CUSTOM_COLLECTOR__') {
-      setIsCustomCollector(true);
-      setCustomCollectorInput('');
-    } else {
-      setIsCustomCollector(false);
-      setCollectedByName(val);
-    }
-  };
-
-  const handleSaveCustomCollector = () => {
-    const trimmed = customCollectorInput.trim();
-    if (trimmed) {
-      setCollectedByName(trimmed);
-      setIsCustomCollector(false);
-      setCustomCollectorInput('');
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
 
-    const finalCollector =
-      isCustomCollector && customCollectorInput.trim()
-        ? customCollectorInput.trim()
-        : collectedByName;
-
-    localStorage.setItem('sgdps_collector_name', finalCollector);
+    localStorage.setItem('sgdps_collector_name', collectedByName);
 
     const finalBlock = isAddingNewBlock && newBlockInput.trim() ? newBlockInput.trim() : block;
     const finalFloor = isAddingNewFloor && parseInt(newFloorInput.trim()) > 0 ? parseInt(newFloorInput.trim()) : floor;
@@ -216,7 +185,7 @@ export const AddEntryPage: React.FC = () => {
         amount: amt,
         mode: paymentMode,
         transactionReference: referenceNo.trim() || undefined,
-        collectedByName: finalCollector,
+        collectedByName: collectedByName,
         remarks: remarks.trim() || undefined,
         collectionDateTime: new Date(collectionDate).toISOString(),
       }).unwrap();
@@ -590,50 +559,12 @@ export const AddEntryPage: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  {!isCustomCollector ? (
-                    <Select
-                      label="Collected By (Collector / Admin) *"
-                      value={collectedByName}
-                      onChange={handleCollectorSelectChange}
-                      options={collectorOptions}
-                    />
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
-                        Custom Collector Name *
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          autoFocus
-                          placeholder="e.g. S. Sen (Volunteer)"
-                          value={customCollectorInput}
-                          onChange={(e) => setCustomCollectorInput(e.target.value)}
-                          className="text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleSaveCustomCollector}
-                          className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0"
-                          title="Save Name"
-                        >
-                          <Check size={16} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsCustomCollector(false);
-                            setCustomCollectorInput('');
-                          }}
-                          className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300"
-                          title="Cancel"
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <Select
+                  label="Collected By (Collector / Admin) *"
+                  value={collectedByName}
+                  onChange={(e) => setCollectedByName(e.target.value)}
+                  options={collectorOptions}
+                />
 
                 <Input
                   label="Remarks / Notes"

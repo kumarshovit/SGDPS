@@ -6,7 +6,6 @@ import { logout } from '../../features/auth/slices/authSlice';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import {
   Menu,
-  Search,
   Plus,
   LogOut,
   Settings,
@@ -43,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   return (
     <>
       <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between px-4 lg:px-8 glass-header">
-        {/* Left Side: Mobile Menu Button & Search */}
+        {/* Left Side: Mobile Menu Button */}
         <div className="flex items-center gap-3">
           <button
             onClick={onMenuClick}
@@ -52,30 +51,10 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           >
             <Menu size={20} />
           </button>
-
-          {/* Quick Search Bar */}
-          <div className="hidden sm:flex items-center gap-2 rounded-xl border border-cream-border dark:border-charcoal-700 bg-white/70 dark:bg-charcoal-900/80 px-3 py-1.5 text-xs text-charcoal-400 w-64 lg:w-72 shadow-sm">
-            <Search size={15} className="text-gold-600 dark:text-gold-400" />
-            <input
-              type="text"
-              placeholder="Search resident, flat, receipt..."
-              className="bg-transparent border-none outline-none text-charcoal-800 dark:text-cream-100 placeholder-charcoal-400 dark:placeholder-charcoal-400 w-full text-xs"
-              onFocus={() => navigate('/collections')}
-            />
-            <kbd className="hidden lg:inline-block rounded bg-cream-100 dark:bg-charcoal-700 px-1.5 py-0.5 text-[10px] font-bold text-charcoal-600 dark:text-cream-200">
-              ⌘K
-            </kbd>
-          </div>
         </div>
 
-        {/* Right Side: Live Indicator, Action, Theme Switcher, Profile */}
+        {/* Right Side: Action, Theme Switcher, Profile */}
         <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Live Status Pill */}
-          <div className="hidden md:flex items-center gap-1.5 rounded-full bg-leaf-500/15 border border-leaf-500/30 px-2.5 py-1 text-xs font-bold text-leaf-800 dark:text-leaf-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-leaf-600 dark:bg-leaf-400 animate-pulse" />
-            Live Central DB
-          </div>
-
           {/* Saffron-to-Gold Add Collection CTA */}
           <Button
             size="sm"

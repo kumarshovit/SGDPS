@@ -18,14 +18,6 @@ import {
   FileSpreadsheet,
   Flame,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-} from 'recharts';
 import { exportFinancialStatementPDF } from '../../../utils/exportHelpers';
 
 export const DashboardPage: React.FC = () => {
@@ -40,34 +32,7 @@ export const DashboardPage: React.FC = () => {
   const cashAmount = kpis?.cashCollection || 0;
   const upiAmount = (kpis?.upiCollection || 0) + (kpis?.bankCollection || 0);
 
-  // Collection Timeline (computed from collections)
-  const timelineData = React.useMemo(() => {
-    if (!collections.length) {
-      return [
-        { date: 'Day 1', amount: 1500 },
-        { date: 'Day 2', amount: 3200 },
-        { date: 'Day 3', amount: 5800 },
-        { date: 'Day 4', amount: 9400 },
-        { date: 'Day 5', amount: 14200 },
-      ];
-    }
-    const map: Record<string, number> = {};
-    const sorted = [...collections].sort(
-      (a, b) => new Date(a.collectionDateTime).getTime() - new Date(b.collectionDateTime).getTime()
-    );
-    let running = 0;
-    for (const c of sorted) {
-      const d = new Date(c.collectionDateTime).toLocaleDateString('en-IN', {
-        month: 'short',
-        day: 'numeric',
-      });
-      running += c.amount;
-      map[d] = running;
-    }
-    return Object.entries(map).map(([date, amount]) => ({ date, amount }));
-  }, [collections]);
-
-  const recentCollections = collections.slice(0, 8);
+  const recentCollections = collections.slice(0, 5);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -102,27 +67,6 @@ export const DashboardPage: React.FC = () => {
               Track society subscriptions, donations, cash reserves, and festive operational expenditures in real-time.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="secondary"
-              size="md"
-              leftIcon={<FileSpreadsheet size={16} />}
-              onClick={() => exportFinancialStatementPDF(collections, expenses)}
-              className="bg-white/10 hover:bg-white/20 text-cream-50 border-gold-500/30 backdrop-blur-md"
-            >
-              Export Statement
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              leftIcon={<Plus size={16} />}
-              onClick={() => navigate('/add')}
-              className="shadow-gold"
-            >
-              + Record Collection
-            </Button>
-          </div>
         </div>
       </div>
 
@@ -154,66 +98,10 @@ export const DashboardPage: React.FC = () => {
         />
       </div>
 
-      {/* 1. Collection Growth Trend Chart (Full Width) */}
+      {/* Top 5 Recent Collections Table */}
       <GlassCard
-        title="Collection Growth Trend"
-        subtitle="Cumulative funds accumulated over time across all sources"
-        action={
-          <Badge variant="gold" size="sm">
-            Live Real-Time
-          </Badge>
-        }
-      >
-        <div className="h-80 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={timelineData} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorAmountFestive" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#E8A33D" stopOpacity={0.5} />
-                  <stop offset="95%" stopColor="#EA580C" stopOpacity={0.0} />
-                </linearGradient>
-              </defs>
-              <XAxis
-                dataKey="date"
-                stroke="#AFA49C"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                stroke="#AFA49C"
-                fontSize={12}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `₹${v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v}`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1C1310',
-                  border: '1px solid #E8A33D',
-                  borderRadius: '12px',
-                  color: '#FAF5E8',
-                  fontSize: '12px',
-                }}
-                formatter={(value: any) => [formatCurrency(Number(value)), 'Total Collected']}
-              />
-              <Area
-                type="monotone"
-                dataKey="amount"
-                stroke="#E8A33D"
-                strokeWidth={3}
-                fillOpacity={1}
-                fill="url(#colorAmountFestive)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </GlassCard>
-
-      {/* 2. Live Recent Transactions Stream (Full Width) */}
-      <GlassCard
-        title="Recent Transactions Stream"
-        subtitle="Live collection entries logged across society"
+        title="Top 5 Recent Collections"
+        subtitle="Latest payment receipts logged across society and puja counters"
         action={
           <Button
             size="sm"
@@ -230,25 +118,39 @@ export const DashboardPage: React.FC = () => {
             No collections logged yet. Click <strong>+ Record Collection</strong> to record a contribution.
           </div>
         ) : (
-          <div className="divide-y divide-cream-100 dark:divide-charcoal-700">
-            {recentCollections.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-center justify-between py-3.5 hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 px-2 rounded-xl transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-maroon-800/10 dark:bg-maroon-800/30 text-maroon-800 dark:text-gold-400 border border-maroon-800/20 font-bold text-xs">
-                    {entry.type === 'ResidentBlock'
-                      ? entry.block?.slice(0, 1) || 'A'
-                      : 'S'}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-charcoal-900 dark:text-cream-50">
-                        {entry.type === 'ResidentBlock'
-                          ? `${entry.block} · Floor ${entry.floor} · Flat ${entry.flatNumber}`
-                          : entry.category}
-                      </span>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[650px]">
+              <thead>
+                <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400 uppercase">
+                  <th className="py-3 px-3">Receipt #</th>
+                  <th className="py-3 px-3">Flat / Source</th>
+                  <th className="py-3 px-3">Resident / Donor</th>
+                  <th className="py-3 px-3">Mode</th>
+                  <th className="py-3 px-3">Date & Time</th>
+                  <th className="py-3 px-3 text-right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                {recentCollections.map((entry) => (
+                  <tr
+                    key={entry.id}
+                    className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                  >
+                    <td className="py-3.5 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
+                      {entry.receiptNumber || `REC-${entry.id}`}
+                    </td>
+
+                    <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                      {entry.type === 'ResidentBlock'
+                        ? `${entry.block} · Fl ${entry.floor} · Flat ${entry.flatNumber}`
+                        : entry.category}
+                    </td>
+
+                    <td className="py-3.5 px-3 text-charcoal-800 dark:text-cream-200 font-medium">
+                      {entry.donorResidentName || 'Resident'}
+                    </td>
+
+                    <td className="py-3.5 px-3">
                       <Badge
                         variant={
                           entry.mode === 'Cash'
@@ -261,23 +163,19 @@ export const DashboardPage: React.FC = () => {
                       >
                         {entry.mode}
                       </Badge>
-                    </div>
-                    <p className="text-xs text-charcoal-500 dark:text-charcoal-400 mt-0.5 font-medium">
-                      {entry.donorResidentName || 'Resident'} · {formatDateTime(entry.collectionDateTime)}
-                    </p>
-                  </div>
-                </div>
+                    </td>
 
-                <div className="text-right">
-                  <span className="text-sm font-extrabold text-leaf-700 dark:text-leaf-400">
-                    +{formatCurrency(entry.amount)}
-                  </span>
-                  <p className="text-[10px] text-charcoal-400 dark:text-charcoal-400 font-mono">
-                    #{entry.receiptNumber}
-                  </p>
-                </div>
-              </div>
-            ))}
+                    <td className="py-3.5 px-3 font-mono text-charcoal-500 dark:text-charcoal-400 whitespace-nowrap">
+                      {formatDateTime(entry.collectionDateTime)}
+                    </td>
+
+                    <td className="py-3.5 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                      +{formatCurrency(entry.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </GlassCard>
