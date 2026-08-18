@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGetDashboardKpisQuery } from '../api/dashboardApiSlice';
 import { useGetCollectionsQuery } from '../../collections/api/collectionApiSlice';
 import { useGetExpensesQuery } from '../../expenses/api/expenseApiSlice';
+import { Collection } from '../../collections/types';
 import { formatCurrency, formatDateTime } from '../../../utils/formatters';
 import { StatCard } from '../../../components/ui/StatCard';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -23,16 +24,18 @@ import { exportFinancialStatementPDF } from '../../../utils/exportHelpers';
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
   const { data: kpis } = useGetDashboardKpisQuery();
-  const { data: collections = [] } = useGetCollectionsQuery();
+  const { data: collections = [] as Collection[] } = useGetCollectionsQuery();
   const { data: expenses = [] } = useGetExpensesQuery();
 
-  const totalCollected = kpis?.totalCollection || 0;
-  const totalExpense = kpis?.totalExpenses || 0;
-  const netBalance = kpis?.currentBalance ?? totalCollected - totalExpense;
-  const cashAmount = kpis?.cashCollection || 0;
-  const upiAmount = (kpis?.upiCollection || 0) + (kpis?.bankCollection || 0);
+  const totalCollected = useMemo(() => collections.reduce((s, c) => s + (c.amount || 0), 0), [collections]);
+  const totalExpense = useMemo(() => expenses.reduce((s, e) => s + (e.amount || 0), 0), [expenses]);
+  const netBalance = totalCollected - totalExpense;
 
-  const recentCollections = collections.slice(0, 5);
+  const cashInflow = useMemo(() => collections.filter((c) => c.mode === 'Cash').reduce((s, c) => s + (c.amount || 0), 0), [collections]);
+  const cashOutflow = useMemo(() => expenses.filter((e) => e.paymentMode === 'Cash').reduce((s, e) => s + (e.amount || 0), 0), [expenses]);
+  const cashInHand = cashInflow - cashOutflow;
+
+  const recentCollections = useMemo(() => (collections as Collection[]).slice(0, 5), [collections]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -92,7 +95,7 @@ export const DashboardPage: React.FC = () => {
         />
         <StatCard
           title="Cash In Hand"
-          value={formatCurrency(cashAmount)}
+          value={formatCurrency(cashInHand)}
           icon={Building}
           gradient="maroon"
         />

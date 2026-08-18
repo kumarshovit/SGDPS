@@ -68,9 +68,18 @@ public class GetDashboardKpisEndpoint(AppDbContext db) : EndpointWithoutRequest<
     var flats = await db.Flats.AsNoTracking().ToListAsync(ct);
 
     decimal totalCollection = collections.Sum(c => c.Amount);
-    decimal cashCollection = collections.Where(c => c.Mode == PaymentMode.Cash).Sum(c => c.Amount);
-    decimal upiCollection = collections.Where(c => c.Mode == PaymentMode.UPI).Sum(c => c.Amount);
-    decimal bankCollection = collections.Where(c => c.Mode == PaymentMode.BankTransfer).Sum(c => c.Amount);
+    decimal cashInflow = collections.Where(c => c.Mode == PaymentMode.Cash).Sum(c => c.Amount);
+    decimal cashOutflow = expenses.Where(e => e.PaymentMode == PaymentMode.Cash).Sum(e => e.Amount);
+    decimal cashCollection = cashInflow - cashOutflow;
+
+    decimal upiInflow = collections.Where(c => c.Mode == PaymentMode.UPI).Sum(c => c.Amount);
+    decimal upiOutflow = expenses.Where(e => e.PaymentMode == PaymentMode.UPI).Sum(e => e.Amount);
+    decimal upiCollection = upiInflow - upiOutflow;
+
+    decimal bankInflow = collections.Where(c => c.Mode == PaymentMode.BankTransfer).Sum(c => c.Amount);
+    decimal bankOutflow = expenses.Where(e => e.PaymentMode == PaymentMode.BankTransfer).Sum(e => e.Amount);
+    decimal bankCollection = bankInflow - bankOutflow;
+
     decimal chequeCollection = collections.Where(c => c.Mode == PaymentMode.Cheque).Sum(c => c.Amount);
 
     decimal totalExpenses = expenses.Sum(e => e.Amount);
