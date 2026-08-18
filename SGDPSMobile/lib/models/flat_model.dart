@@ -1,0 +1,42 @@
+class FlatModel {
+  final int id;
+  final String block;
+  final int floor;
+  final String flatNumber;
+  final String ownerName;
+  final String ownerPhone;
+  final double expectedAmount;
+  final double totalCollected;
+  final double pendingAmount;
+  final String paymentStatus;
+
+  FlatModel({
+    required this.id,
+    required this.block,
+    required this.floor,
+    required this.flatNumber,
+    required this.ownerName,
+    required this.ownerPhone,
+    required this.expectedAmount,
+    required this.totalCollected,
+    required this.pendingAmount,
+    required this.paymentStatus,
+  });
+
+  String get displayName => '$block · Fl $floor · Flat $flatNumber ($ownerName)';
+
+  factory FlatModel.fromJson(Map<String, dynamic> json) {
+    return FlatModel(
+      id: json['id'] as int? ?? 0,
+      block: json['block'] as String? ?? '',
+      floor: json['floor'] as int? ?? 1,
+      flatNumber: json['flatNumber'] as String? ?? '',
+      ownerName: json['ownerName'] as String? ?? '',
+      ownerPhone: json['ownerPhone'] as String? ?? '',
+      expectedAmount: (json['expectedAmount'] as num?)?.toDouble() ?? 0.0,
+      totalCollected: (json['totalCollected'] as num?)?.toDouble() ?? 0.0,
+      pendingAmount: (json['pendingAmount'] as num?)?.toDouble() ?? 0.0,
+      paymentStatus: json['paymentStatus'] as String? ?? 'Pending',
+    );
+  }
+}

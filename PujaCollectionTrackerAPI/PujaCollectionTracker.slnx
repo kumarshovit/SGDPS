@@ -1,0 +1,33 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".template.config/template.json" />
+    <File Path="CleanArchitecture.nuspec" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/PujaCollectionTracker.Core/PujaCollectionTracker.Core.csproj" />
+    <Project Path="src/PujaCollectionTracker.Infrastructure/PujaCollectionTracker.Infrastructure.csproj" />
+    <Project Path="src/PujaCollectionTracker.UseCases/PujaCollectionTracker.UseCases.csproj" />
+    <Project Path="src/PujaCollectionTracker.Web/PujaCollectionTracker.Web.csproj" />
+  </Folder>
+  <Folder Name="/src/_aspire/">
+    <Project Path="src/PujaCollectionTracker.AspireHost/PujaCollectionTracker.AspireHost.csproj" />
+    <Project Path="src/PujaCollectionTracker.ServiceDefaults/PujaCollectionTracker.ServiceDefaults.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PujaCollectionTracker.FunctionalTests/PujaCollectionTracker.FunctionalTests.csproj">
+      <BuildDependency Project="src/PujaCollectionTracker.Web/PujaCollectionTracker.Web.csproj" />
+    </Project>
+    <Project Path="tests/PujaCollectionTracker.IntegrationTests/PujaCollectionTracker.IntegrationTests.csproj">
+      <BuildDependency Project="src/PujaCollectionTracker.Infrastructure/PujaCollectionTracker.Infrastructure.csproj" />
+    </Project>
+    <Project Path="tests/PujaCollectionTracker.UnitTests/PujaCollectionTracker.UnitTests.csproj" />
+  </Folder>
+</Solution>

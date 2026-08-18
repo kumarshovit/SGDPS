@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Ardalis.Result" />
+    <PackageReference Include="System.Security.Cryptography.Xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PujaCollectionTracker.Core\PujaCollectionTracker.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Authentication\Login\" />
+    <Folder Include="Authentication\ForgotPassword\" />
+    <Folder Include="Authentication\ResetPassword\" />
+    <Folder Include="Authentication\Register\" />
+  </ItemGroup>
+
+</Project>

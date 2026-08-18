@@ -1,0 +1,116 @@
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { formatCurrency, formatDateTime } from './formatters';
+
+export const exportToExcel = (data: any[], fileName: string, sheetName: string = 'Sheet1') => {
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, `${fileName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+export const exportToPdf = (
+  title: string,
+  headers: string[],
+  rows: (string | number)[][],
+  fileName: string
+) => {
+  const doc = new jsPDF();
+  
+  // Header with maroon brand color
+  doc.setFillColor(124, 31, 46); // #7C1F2E
+  doc.rect(0, 0, 210, 24, 'F');
+  
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
+  doc.text('SGDPS - Financial & Collection Report', 14, 15);
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Generated: ${new Date().toLocaleString('en-IN')}`, 14, 21);
+
+  // Subtitle
+  doc.setFontSize(13);
+  doc.setTextColor(43, 26, 20); // #2B1A14
+  doc.text(title, 14, 34);
+
+  // Table
+  autoTable(doc, {
+    startY: 38,
+    head: [headers],
+    body: rows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [124, 31, 46],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3,
+    },
+    alternateRowStyles: {
+      fillColor: [251, 244, 232], // #FBF4E8
+    },
+  });
+
+  doc.save(`${fileName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+};
+
+export const exportFlatsToExcel = (flats: any[]) => {
+  const data = flats.map((f) => ({
+    Block: f.block,
+    Floor: f.floor,
+    'Flat No': f.flatNumber,
+    'Resident / Owner': f.ownerName,
+    Phone: f.ownerPhone,
+    'Expected (Rs)': f.expectedAmount,
+    'Collected (Rs)': f.totalCollected,
+    'Pending (Rs)': f.pendingAmount,
+    Status: f.paymentStatus,
+  }));
+  exportToExcel(data, 'SGDPS_Flats_Master');
+};
+
+export const exportExpensesToExcel = (expenses: any[]) => {
+  const data = expenses.map((e) => ({
+    Date: formatDateTime(e.expenseDate),
+    Category: e.category,
+    Description: e.description,
+    'Amount (Rs)': e.amount,
+    'Payment Mode': e.paymentMode,
+    Vendor: e.vendor || '',
+    Remarks: e.remarks || '',
+  }));
+  exportToExcel(data, 'SGDPS_Expenses_Ledger');
+};
+
+export const exportDefaultersToExcel = (defaulters: any[]) => {
+  const data = defaulters.map((d) => ({
+    Block: d.block,
+    Floor: d.floor,
+    'Flat No': d.flatNumber,
+    Resident: d.ownerName,
+    Phone: d.ownerPhone,
+    'Expected Target (Rs)': d.expectedAmount,
+    'Total Paid (Rs)': d.totalPaid,
+    'Outstanding Due (Rs)': d.pendingAmount,
+  }));
+  exportToExcel(data, 'SGDPS_Pending_Defaulters');
+};
+
+export const exportFinancialStatementPDF = (collections: any[], expenses: any[]) => {
+  const totalCollections = collections.reduce((s, c) => s + (c.amount || 0), 0);
+  const totalExpenses = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+  const balance = totalCollections - totalExpenses;
+
+  const rows = [
+    ['Total Collections (Income)', formatCurrency(totalCollections)],
+    ['Total Expenses (Vouchers)', formatCurrency(totalExpenses)],
+    ['Net Available Balance', formatCurrency(balance)],
+  ];
+
+  exportToPdf('Financial Balance Audit Statement', ['Item', 'Amount'], rows, 'SGDPS_Financial_Summary');
+};
