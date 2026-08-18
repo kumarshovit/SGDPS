@@ -70,12 +70,3 @@ cd SGDPSMobile
 flutter pub get
 flutter run
 ```
-
----
-
-## 🔑 Default Credentials
-
-| Role | Email | Password | Access |
-| :--- | :--- | :--- | :--- |
-| **Admin & Treasurer** | `admin@sgdps.com` | `Admin@123` | Web Portal (`SGDPSWebsite`) |
-| **Field Collector** | `collector@sgdps.com` | `Collector@123` | Mobile App (`SGDPSMobile`) |
