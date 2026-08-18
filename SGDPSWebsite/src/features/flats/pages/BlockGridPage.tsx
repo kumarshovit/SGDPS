@@ -4,22 +4,24 @@ import {
   useCreateCollectionMutation,
   useDeleteCollectionMutation,
 } from '../../collections/api/collectionApiSlice';
+import { useGetFlatsQuery } from '../api/flatApiSlice';
+import { useGetCollectorsQuery } from '../../users/api/userApiSlice';
 import { formatCurrency, formatOrdinal } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
-import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
-import { Building2, Layers, CheckCircle2, AlertCircle, Plus, Trash2, IndianRupee } from 'lucide-react';
+import { Badge } from '../../../components/ui/Badge';
+import { Building2, Layers, Trash2, IndianRupee, Flame } from 'lucide-react';
 import { PaymentMode } from '../../collections/types';
 
-const DEFAULT_BLOCKS = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
-const NUM_FLOORS = 9;
 const NUM_FLATS = 7;
 
 export const BlockGridPage: React.FC = () => {
-  const { data: collections = [], isLoading } = useGetCollectionsQuery();
+  const { data: collections = [], isLoading: isCollectionsLoading } = useGetCollectionsQuery();
+  const { data: flatsData = [], isLoading: isFlatsLoading } = useGetFlatsQuery();
+  const { data: collectors = [] } = useGetCollectorsQuery();
   const [activeBlock, setActiveBlock] = useState('A-Block');
   const [selectedCell, setSelectedCell] = useState<{
     block: string;
@@ -37,6 +39,27 @@ export const BlockGridPage: React.FC = () => {
 
   const [createCollection, { isLoading: isSaving }] = useCreateCollectionMutation();
   const [deleteCollection] = useDeleteCollectionMutation();
+
+  // Collector dropdown options
+  const collectorOptions = useMemo(() => {
+    const defaultOption = { label: '👑 Admin (System Admin & Treasurer)', value: 'Admin' };
+    const collectorList = collectors.map((c) => {
+      const name = c.fullName || `${c.firstName} ${c.lastName || ''}`.trim();
+      return {
+        label: `📱 ${name} (Collector)`,
+        value: name,
+      };
+    });
+    return [defaultOption, ...collectorList];
+  }, [collectors]);
+
+  // Dynamic available blocks list (from flats database, collections, and defaults)
+  const availableBlocks = useMemo(() => {
+    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+    const fromFlats = flatsData.map((f) => f.block).filter(Boolean);
+    const fromCollections = collections.map((c) => c.block).filter(Boolean) as string[];
+    return Array.from(new Set([...defaults, ...fromFlats, ...fromCollections]));
+  }, [flatsData, collections]);
 
   // Grid aggregation: gridData[block][floor][flat] = totalAmount
   const gridData = useMemo(() => {
@@ -58,23 +81,32 @@ export const BlockGridPage: React.FC = () => {
   }, [collections]);
 
   const blockData = gridData[activeBlock] || {};
-  const floors = Array.from({ length: NUM_FLOORS }, (_, i) => i + 1).reverse();
+
+  // Compute floors dynamically for active block
+  const floors = useMemo(() => {
+    const blockFlats = flatsData.filter((f) => f.block === activeBlock);
+    const maxFloorFromFlats = blockFlats.length > 0 ? Math.max(...blockFlats.map((f) => f.floor)) : 9;
+    const maxFloor = Math.max(9, maxFloorFromFlats);
+    return Array.from({ length: maxFloor }, (_, i) => i + 1).reverse();
+  }, [flatsData, activeBlock]);
+
   const flats = Array.from({ length: NUM_FLATS }, (_, i) => i + 1);
 
   // Block Totals & Counts
-  const { blockTotal, paidCount, totalUnits } = useMemo(() => {
+  const { blockTotal, paidCount, totalUnits, pct } = useMemo(() => {
     let sum = 0;
     let paid = 0;
-    const total = NUM_FLOORS * NUM_FLATS;
-    for (let f = 1; f <= NUM_FLOORS; f++) {
+    const total = floors.length * NUM_FLATS;
+    for (const f of floors) {
       for (let fl = 1; fl <= NUM_FLATS; fl++) {
         const amt = blockData[f]?.[fl] || 0;
         sum += amt;
         if (amt > 0) paid++;
       }
     }
-    return { blockTotal: sum, paidCount: paid, totalUnits: total };
-  }, [blockData]);
+    const percent = total > 0 ? Math.round((paid / total) * 100) : 0;
+    return { blockTotal: sum, paidCount: paid, totalUnits: total, pct: percent };
+  }, [blockData, floors]);
 
   // Entries for the selected cell in the modal
   const cellEntries = useMemo(() => {
@@ -172,54 +204,59 @@ export const BlockGridPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tower Selector Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        {DEFAULT_BLOCKS.map((b) => {
-          const bData = gridData[b] || {};
-          let sum = 0;
-          let count = 0;
-          for (let f = 1; f <= NUM_FLOORS; f++) {
-            for (let fl = 1; fl <= NUM_FLATS; fl++) {
-              const val = bData[f]?.[fl] || 0;
-              sum += val;
-              if (val > 0) count++;
-            }
-          }
-          const pct = Math.round((count / (NUM_FLOORS * NUM_FLATS)) * 100);
-          const isSelected = b === activeBlock;
+      {/* Block Selector & Live Summary Bar */}
+      <GlassCard className="p-5 bg-white dark:bg-charcoal-800">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          {/* Tower Selection Dropdown */}
+          <div className="w-full lg:w-72">
+            <Select
+              label="Select Tower / Block"
+              value={activeBlock}
+              onChange={(e) => setActiveBlock(e.target.value)}
+              options={availableBlocks.map((b) => ({
+                label: `🏢 ${b}`,
+                value: b,
+              }))}
+            />
+          </div>
 
-          return (
-            <button
-              key={b}
-              type="button"
-              onClick={() => setActiveBlock(b)}
-              className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
-                isSelected
-                  ? 'border-gold-500 bg-gold-500/15 text-gold-800 dark:text-gold-300 shadow-gold'
-                  : 'border-cream-border dark:border-charcoal-700 bg-white dark:bg-charcoal-800 text-charcoal-700 dark:text-cream-200 hover:border-gold-400'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-sm text-charcoal-900 dark:text-cream-50">{b}</span>
-                <span className="text-xs font-bold text-saffron-600 dark:text-gold-400">{pct}%</span>
+          {/* Selected Block Real-Time Statistics */}
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4 items-center bg-cream-50/70 dark:bg-charcoal-900/60 p-4 rounded-2xl border border-cream-border dark:border-charcoal-700">
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-charcoal-400">
+                Active Tower
+              </span>
+              <div className="text-lg font-extrabold text-charcoal-900 dark:text-cream-50 font-display">
+                {activeBlock}
               </div>
-              <div className="text-lg font-extrabold text-charcoal-900 dark:text-cream-50">
-                {formatCurrency(sum)}
+            </div>
+
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-leaf-600 dark:text-leaf-400">
+                Funds Collected
+              </span>
+              <div className="text-lg font-extrabold text-leaf-700 dark:text-leaf-300 font-mono">
+                {formatCurrency(blockTotal)}
               </div>
-              <p className="text-[11px] text-charcoal-500 dark:text-charcoal-400 mt-0.5 font-medium">
-                {count} / {NUM_FLOORS * NUM_FLATS} Flats Paid
-              </p>
-              {/* Gold Progress bar */}
-              <div className="w-full bg-cream-200 dark:bg-charcoal-900 h-1.5 rounded-full mt-3 overflow-hidden">
+            </div>
+
+            <div className="col-span-2 sm:col-span-1">
+              <div className="flex justify-between text-xs font-bold mb-1">
+                <span className="text-charcoal-600 dark:text-charcoal-300">
+                  {paidCount} / {totalUnits} Units
+                </span>
+                <span className="text-saffron-600 dark:text-gold-400">{pct}%</span>
+              </div>
+              <div className="w-full bg-cream-200 dark:bg-charcoal-800 h-2 rounded-full overflow-hidden">
                 <div
                   className="bg-gradient-to-r from-saffron-600 to-gold-500 h-full rounded-full transition-all duration-300"
                   style={{ width: `${pct}%` }}
                 />
               </div>
-            </button>
-          );
-        })}
-      </div>
+            </div>
+          </div>
+        </div>
+      </GlassCard>
 
       {/* Interactive Matrix Grid Card */}
       <GlassCard
@@ -370,10 +407,11 @@ export const BlockGridPage: React.FC = () => {
                     { label: '📑 Cheque', value: 'Cheque' },
                   ]}
                 />
-                <Input
-                  label="Collector Name"
+                <Select
+                  label="Collected By"
                   value={collectorName}
                   onChange={(e) => setCollectorName(e.target.value)}
+                  options={collectorOptions}
                 />
               </div>
 

@@ -13,14 +13,14 @@ public class User : EntityBase<User, UserId>, IAggregateRoot
 
   public User(
     string firstName,
-    string lastName,
+    string? lastName,
     string email,
     string passwordHash)
   {
-    FirstName = Guard.Against.NullOrWhiteSpace(firstName);
-    LastName = Guard.Against.NullOrWhiteSpace(lastName);
-    Email = Guard.Against.NullOrWhiteSpace(email);
-    PasswordHash = Guard.Against.NullOrWhiteSpace(passwordHash);
+    FirstName = Guard.Against.NullOrWhiteSpace(firstName).Trim();
+    LastName = lastName?.Trim() ?? string.Empty;
+    Email = Guard.Against.NullOrWhiteSpace(email).Trim();
+    PasswordHash = Guard.Against.NullOrWhiteSpace(passwordHash).Trim();
 
     IsActive = true;
     IsEmailVerified = false;
@@ -75,10 +75,10 @@ public class User : EntityBase<User, UserId>, IAggregateRoot
 
   public void UpdateName(
     string firstName,
-    string lastName)
+    string? lastName)
   {
-    FirstName = Guard.Against.NullOrWhiteSpace(firstName);
-    LastName = Guard.Against.NullOrWhiteSpace(lastName);
+    FirstName = Guard.Against.NullOrWhiteSpace(firstName).Trim();
+    LastName = lastName?.Trim() ?? string.Empty;
 
     UpdatedOn = DateTime.UtcNow;
   }

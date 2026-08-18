@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCreateCollectionMutation } from '../api/collectionApiSlice';
 import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
+import { useGetCollectorsQuery } from '../../users/api/userApiSlice';
 import { formatCurrency, formatOrdinal } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
@@ -17,6 +18,9 @@ import {
   User,
   ArrowRight,
   Flame,
+  Check,
+  X,
+  Smartphone,
 } from 'lucide-react';
 import { PaymentMode } from '../types';
 
@@ -50,11 +54,21 @@ export const AddEntryPage: React.FC = () => {
   const [collectedByName, setCollectedByName] = useState(
     localStorage.getItem('sgdps_collector_name') || 'Admin'
   );
+  const [isCustomCollector, setIsCustomCollector] = useState(false);
+  const [customCollectorInput, setCustomCollectorInput] = useState('');
   const [referenceNo, setReferenceNo] = useState('');
   const [remarks, setRemarks] = useState('');
   const [collectionDate, setCollectionDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
+
+  // Custom Block & Floor State
+  const [customBlocks, setCustomBlocks] = useState<string[]>([]);
+  const [customFloors, setCustomFloors] = useState<number[]>([]);
+  const [isAddingNewBlock, setIsAddingNewBlock] = useState(false);
+  const [newBlockInput, setNewBlockInput] = useState('');
+  const [isAddingNewFloor, setIsAddingNewFloor] = useState(false);
+  const [newFloorInput, setNewFloorInput] = useState('');
 
   const [successReceipt, setSuccessReceipt] = useState<{
     receiptNo: string;
@@ -64,9 +78,39 @@ export const AddEntryPage: React.FC = () => {
   } | null>(null);
 
   const { data: flats = [] } = useGetFlatsQuery();
+  const { data: collectors = [] } = useGetCollectorsQuery();
   const [createCollection, { isLoading: isSaving }] = useCreateCollectionMutation();
 
-  const blocks = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+  // Collector dropdown options
+  const collectorOptions = useMemo(() => {
+    const defaultOption = { label: '👑 Admin (System Admin & Treasurer)', value: 'Admin' };
+    const collectorList = collectors.map((c) => {
+      const name = c.fullName || `${c.firstName} ${c.lastName || ''}`.trim();
+      return {
+        label: `📱 ${name} (Field Collector)`,
+        value: name,
+      };
+    });
+    return [
+      defaultOption,
+      ...collectorList,
+      { label: '➕ + Enter Custom Collector Name...', value: '__CUSTOM_COLLECTOR__' },
+    ];
+  }, [collectors]);
+
+  // Dynamic available blocks combining defaults, loaded flats, and user additions
+  const availableBlocks = useMemo(() => {
+    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+    const fromFlats = flats.map((f) => f.block).filter(Boolean);
+    return Array.from(new Set([...defaults, ...fromFlats, ...customBlocks]));
+  }, [flats, customBlocks]);
+
+  // Dynamic available floors
+  const availableFloors = useMemo(() => {
+    const defaults = Array.from({ length: 9 }, (_, i) => i + 1);
+    const fromFlats = flats.map((f) => f.floor).filter((f) => f > 0);
+    return Array.from(new Set([...defaults, ...fromFlats, ...customFloors])).sort((a, b) => a - b);
+  }, [flats, customFloors]);
 
   // Match flat if exists
   const selectedFlatNumber = `${floor}0${flat}`;
@@ -76,12 +120,86 @@ export const AddEntryPage: React.FC = () => {
       (f.flatNumber === selectedFlatNumber || f.flatNumber === String(flat))
   );
 
+  const handleBlockSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__ADD_NEW_BLOCK__') {
+      setIsAddingNewBlock(true);
+      setNewBlockInput('');
+    } else {
+      setIsAddingNewBlock(false);
+      setBlock(val);
+    }
+  };
+
+  const handleSaveCustomBlock = () => {
+    const trimmed = newBlockInput.trim();
+    if (trimmed) {
+      if (!customBlocks.includes(trimmed)) {
+        setCustomBlocks((prev) => [...prev, trimmed]);
+      }
+      setBlock(trimmed);
+      setIsAddingNewBlock(false);
+      setNewBlockInput('');
+    }
+  };
+
+  const handleFloorSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__ADD_NEW_FLOOR__') {
+      setIsAddingNewFloor(true);
+      setNewFloorInput('');
+    } else {
+      setIsAddingNewFloor(false);
+      setFloor(parseInt(val));
+    }
+  };
+
+  const handleSaveCustomFloor = () => {
+    const parsed = parseInt(newFloorInput.trim());
+    if (!isNaN(parsed) && parsed > 0) {
+      if (!customFloors.includes(parsed)) {
+        setCustomFloors((prev) => [...prev, parsed]);
+      }
+      setFloor(parsed);
+      setIsAddingNewFloor(false);
+      setNewFloorInput('');
+    }
+  };
+
+  const handleCollectorSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__CUSTOM_COLLECTOR__') {
+      setIsCustomCollector(true);
+      setCustomCollectorInput('');
+    } else {
+      setIsCustomCollector(false);
+      setCollectedByName(val);
+    }
+  };
+
+  const handleSaveCustomCollector = () => {
+    const trimmed = customCollectorInput.trim();
+    if (trimmed) {
+      setCollectedByName(trimmed);
+      setIsCustomCollector(false);
+      setCustomCollectorInput('');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
 
-    localStorage.setItem('sgdps_collector_name', collectedByName.trim());
+    const finalCollector =
+      isCustomCollector && customCollectorInput.trim()
+        ? customCollectorInput.trim()
+        : collectedByName;
+
+    localStorage.setItem('sgdps_collector_name', finalCollector);
+
+    const finalBlock = isAddingNewBlock && newBlockInput.trim() ? newBlockInput.trim() : block;
+    const finalFloor = isAddingNewFloor && parseInt(newFloorInput.trim()) > 0 ? parseInt(newFloorInput.trim()) : floor;
 
     try {
       const finalCategory =
@@ -90,15 +208,15 @@ export const AddEntryPage: React.FC = () => {
       const result = await createCollection({
         type: entryType,
         flatId: matchedFlat?.id,
-        block: entryType === 'ResidentBlock' ? block : undefined,
-        floor: entryType === 'ResidentBlock' ? floor : undefined,
-        flatNumber: entryType === 'ResidentBlock' ? selectedFlatNumber : undefined,
+        block: entryType === 'ResidentBlock' ? finalBlock : undefined,
+        floor: entryType === 'ResidentBlock' ? finalFloor : undefined,
+        flatNumber: entryType === 'ResidentBlock' ? `${finalFloor}0${flat}` : undefined,
         category: entryType === 'SponsorshipOther' ? finalCategory : undefined,
         donorResidentName: residentName.trim() || matchedFlat?.ownerName || undefined,
         amount: amt,
         mode: paymentMode,
         transactionReference: referenceNo.trim() || undefined,
-        collectedByName: collectedByName.trim(),
+        collectedByName: finalCollector,
         remarks: remarks.trim() || undefined,
         collectionDateTime: new Date(collectionDate).toISOString(),
       }).unwrap();
@@ -109,7 +227,7 @@ export const AddEntryPage: React.FC = () => {
         name: residentName.trim() || matchedFlat?.ownerName || 'Resident',
         target:
           entryType === 'ResidentBlock'
-            ? `${block} · Flat ${selectedFlatNumber}`
+            ? `${finalBlock} · Flat ${finalFloor}0${flat}`
             : finalCategory,
       });
     } catch (err: any) {
@@ -158,32 +276,30 @@ export const AddEntryPage: React.FC = () => {
           <div className="max-w-sm mx-auto p-4 rounded-2xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-left text-xs space-y-2">
             <div className="flex justify-between">
               <span className="text-charcoal-500 dark:text-charcoal-400">Target / Unit:</span>
-              <span className="font-bold text-charcoal-900 dark:text-cream-50">{successReceipt.target}</span>
+              <strong className="text-charcoal-800 dark:text-cream-100">{successReceipt.target}</strong>
             </div>
             <div className="flex justify-between">
-              <span className="text-charcoal-500 dark:text-charcoal-400">Received From:</span>
-              <span className="font-bold text-charcoal-900 dark:text-cream-50">{successReceipt.name}</span>
+              <span className="text-charcoal-500 dark:text-charcoal-400">Paid By:</span>
+              <strong className="text-charcoal-800 dark:text-cream-100">{successReceipt.name}</strong>
             </div>
-            <div className="flex justify-between border-t border-cream-border dark:border-charcoal-700 pt-2">
-              <span className="font-bold text-charcoal-700 dark:text-cream-200">Amount Received:</span>
-              <span className="font-extrabold text-leaf-700 dark:text-leaf-400 text-sm">
-                {formatCurrency(successReceipt.amount)}
-              </span>
+            <div className="flex justify-between border-t border-cream-border dark:border-charcoal-700 pt-2 font-bold text-sm">
+              <span className="text-charcoal-800 dark:text-cream-100">Amount Received:</span>
+              <span className="text-leaf-600 dark:text-leaf-400">{formatCurrency(successReceipt.amount)}</span>
             </div>
           </div>
 
-          <div className="flex justify-center gap-3 pt-2">
-            <Button variant="secondary" onClick={() => navigate('/collections')}>
-              View in Ledger
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button variant="secondary" onClick={handleResetForm}>
+              + Record Another Entry
             </Button>
-            <Button variant="primary" onClick={handleResetForm}>
-              Record Another Entry
+            <Button variant="primary" onClick={() => navigate('/collections')}>
+              View All Collections
             </Button>
           </div>
         </GlassCard>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Segmented Entry Type Toggle */}
+          {/* Top Switcher: Resident vs Sponsorship */}
           <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-cream-100 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700">
             <button
               type="button"
@@ -216,23 +332,110 @@ export const AddEntryPage: React.FC = () => {
             {entryType === 'ResidentBlock' ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Select
-                    label="Tower / Block"
-                    value={block}
-                    onChange={(e) => setBlock(e.target.value)}
-                    options={blocks.map((b) => ({ label: b, value: b }))}
-                  />
+                  {/* TOWER / BLOCK */}
+                  <div>
+                    {!isAddingNewBlock ? (
+                      <Select
+                        label="Tower / Block"
+                        value={block}
+                        onChange={handleBlockSelectChange}
+                        options={[
+                          ...availableBlocks.map((b) => ({ label: b, value: b })),
+                          { label: '+ Add Block', value: '__ADD_NEW_BLOCK__' },
+                        ]}
+                      />
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                          New Block *
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            autoFocus
+                            placeholder="e.g. E-Block, Tower-5"
+                            value={newBlockInput}
+                            onChange={(e) => setNewBlockInput(e.target.value)}
+                            className="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveCustomBlock}
+                            className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0"
+                            title="Save Block"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingNewBlock(false);
+                              setNewBlockInput('');
+                            }}
+                            className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300"
+                            title="Cancel"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-                  <Select
-                    label="Floor Level"
-                    value={floor}
-                    onChange={(e) => setFloor(parseInt(e.target.value))}
-                    options={Array.from({ length: 9 }, (_, i) => i + 1).map((f) => ({
-                      label: `${formatOrdinal(f)} Floor`,
-                      value: f,
-                    }))}
-                  />
+                  {/* FLOOR LEVEL */}
+                  <div>
+                    {!isAddingNewFloor ? (
+                      <Select
+                        label="Floor Level"
+                        value={floor}
+                        onChange={handleFloorSelectChange}
+                        options={[
+                          ...availableFloors.map((f) => ({
+                            label: `${formatOrdinal(f)} Floor`,
+                            value: f,
+                          })),
+                          { label: '+ Add Floor', value: '__ADD_NEW_FLOOR__' },
+                        ]}
+                      />
+                    ) : (
+                      <div>
+                        <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                          New Floor Number *
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            type="number"
+                            min="1"
+                            autoFocus
+                            placeholder="e.g. 10, 11, 12"
+                            value={newFloorInput}
+                            onChange={(e) => setNewFloorInput(e.target.value)}
+                            className="text-xs"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSaveCustomFloor}
+                            className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0"
+                            title="Add Floor"
+                          >
+                            <Check size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsAddingNewFloor(false);
+                              setNewFloorInput('');
+                            }}
+                            className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300"
+                            title="Cancel"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
+                  {/* FLAT NUMBER */}
                   <Select
                     label="Flat Number"
                     value={flat}
@@ -260,33 +463,48 @@ export const AddEntryPage: React.FC = () => {
                           ? 'success'
                           : matchedFlat.paymentStatus === 'PartiallyPaid'
                           ? 'warning'
-                          : 'brand'
+                          : 'danger'
                       }
                     >
-                      {matchedFlat.paymentStatus} · Paid {formatCurrency(matchedFlat.totalCollected)} / {formatCurrency(matchedFlat.expectedAmount)}
+                      Status: {matchedFlat.paymentStatus}
                     </Badge>
                   </div>
                 )}
 
                 <Input
-                  label="Resident / Payer Name (Optional override)"
-                  placeholder={matchedFlat?.ownerName || 'Resident full name'}
+                  label="Resident / Payer Name (Optional if matching registered owner)"
+                  placeholder={matchedFlat?.ownerName || 'e.g. S. K. Mukherjee'}
                   value={residentName}
                   onChange={(e) => setResidentName(e.target.value)}
                   icon={<User size={16} />}
                 />
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-4">
                 <Select
-                  label="Sponsorship / Collection Category"
+                  label="Category / Purpose *"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  options={DEFAULT_CATEGORIES.map((c) => ({ label: c, value: c }))}
+                  options={[
+                    ...DEFAULT_CATEGORIES.map((c) => ({ label: c, value: c })),
+                    { label: 'Other Custom Purpose...', value: 'Other' },
+                  ]}
                 />
+
+                {category === 'Other' && (
+                  <Input
+                    label="Specify Purpose *"
+                    required
+                    placeholder="e.g. VIP Pass Contribution"
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                  />
+                )}
+
                 <Input
-                  label="Donor / Sponsor / Vendor Name"
-                  placeholder="e.g. Ramesh Chandra / Krishna Sweets"
+                  label="Donor / Sponsor Organization Name *"
+                  required
+                  placeholder="e.g. Apollo Pharmacy / Resident Name"
                   value={residentName}
                   onChange={(e) => setResidentName(e.target.value)}
                   icon={<User size={16} />}
@@ -295,45 +513,71 @@ export const AddEntryPage: React.FC = () => {
             )}
           </GlassCard>
 
-          {/* Amount & Payment Method Card */}
-          <GlassCard title="2. Contribution & Payment Mode">
-            <div className="space-y-5">
-              {/* Quick Amount Chips */}
+          {/* Payment & Amount Card */}
+          <GlassCard title="2. Financial Details & Mode">
+            <div className="space-y-4">
               <div>
-                <span className="block text-xs font-bold uppercase tracking-wider text-charcoal-700 dark:text-cream-200 mb-2">
-                  Quick Amount Presets
-                </span>
+                <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                  Quick Amount Select (₹)
+                </label>
                 <div className="flex flex-wrap gap-2">
                   {QUICK_AMOUNTS.map((amt) => (
                     <button
                       key={amt}
                       type="button"
                       onClick={() => setAmount(String(amt))}
-                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all ${
                         amount === String(amt)
-                          ? 'bg-gradient-to-r from-saffron-600 to-gold-600 text-white shadow-gold'
-                          : 'bg-cream-100 dark:bg-charcoal-700 text-charcoal-700 dark:text-cream-200 hover:bg-cream-200 dark:hover:bg-charcoal-600 border border-cream-border dark:border-charcoal-600'
+                          ? 'bg-gradient-to-r from-saffron-600 to-gold-500 text-white shadow-gold scale-105'
+                          : 'bg-cream-100 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-charcoal-700 dark:text-charcoal-300 hover:bg-cream-200'
                       }`}
                     >
-                      {formatCurrency(amt)}
+                      ₹{amt.toLocaleString('en-IN')}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Amount Input */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
-                  label="Collected Amount (₹) *"
+                  label="Amount Collected (₹) *"
                   type="number"
-                  min="1"
-                  step="1"
                   required
+                  min="1"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="2500"
                   icon={<IndianRupee size={16} />}
-                  className="text-lg font-bold text-saffron-700 dark:text-gold-400"
+                />
+
+                <div>
+                  <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                    Payment Mode *
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['Cash', 'UPI', 'BankTransfer'] as PaymentMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setPaymentMode(mode)}
+                        className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
+                          paymentMode === mode
+                            ? 'bg-saffron-50 dark:bg-saffron-950/40 border-saffron-500 text-saffron-700 dark:text-gold-400 shadow-sm'
+                            : 'bg-cream-50 dark:bg-charcoal-900 border-cream-border dark:border-charcoal-700 text-charcoal-600 dark:text-charcoal-300'
+                        }`}
+                      >
+                        {mode === 'BankTransfer' ? 'Bank' : mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input
+                  label="Transaction / Reference ID"
+                  placeholder="e.g. UPI Ref / UTR / Cheque #"
+                  value={referenceNo}
+                  onChange={(e) => setReferenceNo(e.target.value)}
                 />
 
                 <Input
@@ -345,78 +589,79 @@ export const AddEntryPage: React.FC = () => {
                 />
               </div>
 
-              {/* Payment Mode Selector Cards */}
-              <div>
-                <span className="block text-xs font-bold uppercase tracking-wider text-charcoal-700 dark:text-cream-200 mb-2">
-                  Payment Mode *
-                </span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[
-                    { mode: 'UPI' as PaymentMode, label: 'UPI / QR Code', icon: '📱' },
-                    { mode: 'Cash' as PaymentMode, label: 'Cash In Hand', icon: '💵' },
-                    { mode: 'BankTransfer' as PaymentMode, label: 'Bank Transfer', icon: '🏦' },
-                    { mode: 'Cheque' as PaymentMode, label: 'Cheque', icon: '📑' },
-                  ].map((item) => (
-                    <button
-                      key={item.mode}
-                      type="button"
-                      onClick={() => setPaymentMode(item.mode)}
-                      className={`p-3 rounded-2xl border text-left transition-all flex flex-col justify-between h-20 ${
-                        paymentMode === item.mode
-                          ? 'border-gold-500 bg-gold-500/15 text-gold-800 dark:text-gold-300 shadow-gold font-bold'
-                          : 'border-cream-border dark:border-charcoal-700 bg-white dark:bg-charcoal-800 text-charcoal-700 dark:text-cream-200 hover:border-gold-400'
-                      }`}
-                    >
-                      <span className="text-xl">{item.icon}</span>
-                      <span className="text-xs font-bold">{item.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Collector & Notes */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  {!isCustomCollector ? (
+                    <Select
+                      label="Collected By (Collector / Admin) *"
+                      value={collectedByName}
+                      onChange={handleCollectorSelectChange}
+                      options={collectorOptions}
+                    />
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                        Custom Collector Name *
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          autoFocus
+                          placeholder="e.g. S. Sen (Volunteer)"
+                          value={customCollectorInput}
+                          onChange={(e) => setCustomCollectorInput(e.target.value)}
+                          className="text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveCustomCollector}
+                          className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0"
+                          title="Save Name"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCustomCollector(false);
+                            setCustomCollectorInput('');
+                          }}
+                          className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300"
+                          title="Cancel"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <Input
-                  label="Collected By (Collector Name) *"
-                  required
-                  value={collectedByName}
-                  onChange={(e) => setCollectedByName(e.target.value)}
-                  placeholder="Admin / Collector name"
-                />
-                <Input
-                  label="Reference / UTR / Cheque Number (Optional)"
-                  value={referenceNo}
-                  onChange={(e) => setReferenceNo(e.target.value)}
-                  placeholder="e.g. UPI Ref #429812903"
+                  label="Remarks / Notes"
+                  placeholder="Optional remarks"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
                 />
               </div>
-
-              <Input
-                label="Remarks / Notes (Optional)"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Any special acknowledgement or receipt remark"
-              />
             </div>
           </GlassCard>
 
           {/* Submit Action */}
-          <div className="flex justify-end gap-3 pt-2">
+          <div className="flex justify-end gap-3">
             <Button
               type="button"
               variant="ghost"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/collections')}
             >
               Cancel
             </Button>
             <Button
               type="submit"
               variant="primary"
-              size="lg"
               isLoading={isSaving}
-              rightIcon={<ArrowRight size={18} />}
+              rightIcon={<ArrowRight size={16} />}
+              className="px-6 py-3"
             >
-              Submit & Issue Receipt
+              Save & Generate Receipt
             </Button>
           </div>
         </form>

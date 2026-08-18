@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useGetFlatsQuery,
   useCreateFlatMutation,
@@ -18,6 +18,10 @@ import {
   FileSpreadsheet,
   Edit2,
   Trash2,
+  Check,
+  X,
+  Building,
+  Layers,
 } from 'lucide-react';
 import { Flat } from '../types';
 import { exportFlatsToExcel } from '../../../utils/exportHelpers';
@@ -36,12 +40,37 @@ export const FlatMasterPage: React.FC = () => {
   const [ownerPhone, setOwnerPhone] = useState<string>('');
   const [expectedAmount, setExpectedAmount] = useState<string>('2500');
 
+  // Custom Block & Floor State
+  const [customBlocks, setCustomBlocks] = useState<string[]>([]);
+  const [customFloors, setCustomFloors] = useState<number[]>([]);
+  const [isAddingNewBlock, setIsAddingNewBlock] = useState<boolean>(false);
+  const [newBlockInput, setNewBlockInput] = useState<string>('');
+  const [isAddingNewFloor, setIsAddingNewFloor] = useState<boolean>(false);
+  const [newFloorInput, setNewFloorInput] = useState<string>('');
+
   const { data: flats = [], isLoading } = useGetFlatsQuery();
   const [createFlat, { isLoading: isCreating }] = useCreateFlatMutation();
   const [updateFlat, { isLoading: isUpdating }] = useUpdateFlatMutation();
   const [deleteFlat] = useDeleteFlatMutation();
 
-  const blocks = ['All', 'A-Block', 'B-Block', 'C-Block', 'D-Block'];
+  // Dynamic available blocks combining default blocks, existing flat records, and custom additions
+  const availableBlocks = useMemo(() => {
+    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+    const fromFlats = flats.map((f) => f.block).filter(Boolean);
+    return Array.from(new Set([...defaults, ...fromFlats, ...customBlocks]));
+  }, [flats, customBlocks]);
+
+  // Dynamic available floors combining 1-9, existing flat records, and custom additions
+  const availableFloors = useMemo(() => {
+    const defaults = Array.from({ length: 9 }, (_, i) => i + 1);
+    const fromFlats = flats.map((f) => f.floor).filter((f) => f > 0);
+    return Array.from(new Set([...defaults, ...fromFlats, ...customFloors])).sort((a, b) => a - b);
+  }, [flats, customFloors]);
+
+  // Filter options with dynamic blocks
+  const filterBlocks = useMemo(() => {
+    return ['All', ...availableBlocks];
+  }, [availableBlocks]);
 
   const filteredFlats = flats.filter((f) => {
     const matchesBlock = selectedBlock === 'All' || f.block === selectedBlock;
@@ -61,12 +90,16 @@ export const FlatMasterPage: React.FC = () => {
 
   const handleOpenAddModal = () => {
     setEditingFlat(null);
-    setBlock('A-Block');
-    setFloor(1);
+    setBlock(availableBlocks[0] || 'A-Block');
+    setFloor(availableFloors[0] || 1);
     setFlatNumber('');
     setOwnerName('');
     setOwnerPhone('');
     setExpectedAmount('2500');
+    setIsAddingNewBlock(false);
+    setNewBlockInput('');
+    setIsAddingNewFloor(false);
+    setNewFloorInput('');
     setIsModalOpen(true);
   };
 
@@ -78,19 +111,73 @@ export const FlatMasterPage: React.FC = () => {
     setOwnerName(flat.ownerName);
     setOwnerPhone(flat.ownerPhone || '');
     setExpectedAmount(flat.expectedAmount.toString());
+    setIsAddingNewBlock(false);
+    setNewBlockInput('');
+    setIsAddingNewFloor(false);
+    setNewFloorInput('');
     setIsModalOpen(true);
+  };
+
+  const handleBlockSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__ADD_NEW_BLOCK__') {
+      setIsAddingNewBlock(true);
+      setNewBlockInput('');
+    } else {
+      setIsAddingNewBlock(false);
+      setBlock(val);
+    }
+  };
+
+  const handleSaveCustomBlock = () => {
+    const trimmed = newBlockInput.trim();
+    if (trimmed) {
+      if (!customBlocks.includes(trimmed)) {
+        setCustomBlocks((prev) => [...prev, trimmed]);
+      }
+      setBlock(trimmed);
+      setIsAddingNewBlock(false);
+      setNewBlockInput('');
+    }
+  };
+
+  const handleFloorSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === '__ADD_NEW_FLOOR__') {
+      setIsAddingNewFloor(true);
+      setNewFloorInput('');
+    } else {
+      setIsAddingNewFloor(false);
+      setFloor(parseInt(val));
+    }
+  };
+
+  const handleSaveCustomFloor = () => {
+    const parsed = parseInt(newFloorInput.trim());
+    if (!isNaN(parsed) && parsed > 0) {
+      if (!customFloors.includes(parsed)) {
+        setCustomFloors((prev) => [...prev, parsed]);
+      }
+      setFloor(parsed);
+      setIsAddingNewFloor(false);
+      setNewFloorInput('');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!flatNumber.trim() || !ownerName.trim()) return;
 
+    // Apply any in-progress custom block or floor input
+    const finalBlock = isAddingNewBlock && newBlockInput.trim() ? newBlockInput.trim() : block;
+    const finalFloor = isAddingNewFloor && parseInt(newFloorInput.trim()) > 0 ? parseInt(newFloorInput.trim()) : floor;
+
     try {
       if (editingFlat) {
         await updateFlat({
           id: editingFlat.id,
-          block,
-          floor,
+          block: finalBlock,
+          floor: finalFloor,
           flatNumber: flatNumber.trim(),
           ownerName: ownerName.trim(),
           ownerPhone: ownerPhone.trim(),
@@ -99,8 +186,8 @@ export const FlatMasterPage: React.FC = () => {
         }).unwrap();
       } else {
         await createFlat({
-          block,
-          floor,
+          block: finalBlock,
+          floor: finalFloor,
           flatNumber: flatNumber.trim(),
           ownerName: ownerName.trim(),
           ownerPhone: ownerPhone.trim(),
@@ -162,139 +249,137 @@ export const FlatMasterPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Summary KPI Strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="p-4 rounded-2xl bg-white dark:bg-charcoal-800 border border-cream-border dark:border-charcoal-700 shadow-festive dark:shadow-festive-dark">
-          <span className="text-xs font-bold text-charcoal-500 dark:text-charcoal-400 uppercase">Total Units</span>
-          <div className="text-2xl font-extrabold text-charcoal-900 dark:text-cream-50 mt-1">{totalFlats}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-charcoal-800 border border-cream-border dark:border-charcoal-700 shadow-festive dark:shadow-festive-dark">
-          <span className="text-xs font-bold text-leaf-700 dark:text-leaf-400 uppercase">Cleared / Paid</span>
-          <div className="text-2xl font-extrabold text-leaf-700 dark:text-leaf-400 mt-1">{paidFlats}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-charcoal-800 border border-cream-border dark:border-charcoal-700 shadow-festive dark:shadow-festive-dark">
-          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase">Partially Paid</span>
-          <div className="text-2xl font-extrabold text-amber-700 dark:text-amber-400 mt-1">{partialFlats}</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-white dark:bg-charcoal-800 border border-cream-border dark:border-charcoal-700 shadow-festive dark:shadow-festive-dark">
-          <span className="text-xs font-bold text-maroon-700 dark:text-rose-400 uppercase">Pending</span>
-          <div className="text-2xl font-extrabold text-maroon-700 dark:text-rose-400 mt-1">{pendingFlats}</div>
-        </div>
+      {/* Stats Summary Bar */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="text-xs text-charcoal-500 dark:text-charcoal-400 font-bold uppercase tracking-wider">Total Units</div>
+          <div className="text-2xl font-bold text-charcoal-900 dark:text-cream-50 mt-1 font-display">{totalFlats}</div>
+        </GlassCard>
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="text-xs text-leaf-600 dark:text-leaf-400 font-bold uppercase tracking-wider">Full Paid</div>
+          <div className="text-2xl font-bold text-leaf-700 dark:text-leaf-300 mt-1 font-display">{paidFlats}</div>
+        </GlassCard>
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="text-xs text-gold-600 dark:text-gold-400 font-bold uppercase tracking-wider">Partially Paid</div>
+          <div className="text-2xl font-bold text-gold-700 dark:text-gold-300 mt-1 font-display">{partialFlats}</div>
+        </GlassCard>
+        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+          <div className="text-xs text-maroon-600 dark:text-maroon-400 font-bold uppercase tracking-wider">Pending Units</div>
+          <div className="text-2xl font-bold text-maroon-700 dark:text-rose-400 mt-1 font-display">{pendingFlats}</div>
+        </GlassCard>
       </div>
 
-      {/* Flats Data Table */}
-      <GlassCard title={`Resident Directory (${filteredFlats.length})`}>
-        {/* Filter Bar */}
-        <div className="flex flex-wrap items-center gap-3 mb-5">
-          <div className="flex-1 min-w-[240px] relative flex items-center">
-            <Search size={16} className="absolute left-3 text-gold-600 dark:text-gold-400" />
-            <input
-              type="text"
-              placeholder="Search resident name, flat #, contact..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 text-xs sm:text-sm text-charcoal-900 dark:text-cream-50 outline-none focus:ring-2 focus:ring-gold-500/50"
-            />
-          </div>
-
-          <div className="flex gap-1.5 overflow-x-auto">
-            {blocks.map((b) => (
+      {/* Filter and Search Bar */}
+      <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
+        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+          {/* Dynamic Block Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-thin">
+            {filterBlocks.map((b) => (
               <button
                 key={b}
-                type="button"
                 onClick={() => setSelectedBlock(b)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl whitespace-nowrap transition-all ${
                   selectedBlock === b
-                    ? 'bg-gradient-to-r from-saffron-600 to-gold-600 text-white shadow-gold'
-                    : 'bg-cream-100 dark:bg-charcoal-700 text-charcoal-700 dark:text-cream-200 hover:bg-cream-200 dark:hover:bg-charcoal-600'
+                    ? 'bg-gradient-to-r from-saffron-600 to-gold-500 text-white shadow-gold'
+                    : 'bg-cream-100 dark:bg-charcoal-900 text-charcoal-700 dark:text-charcoal-300 hover:bg-cream-200 dark:hover:bg-charcoal-700'
                 }`}
               >
                 {b}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Directory Table */}
+          {/* Search Box */}
+          <div className="w-full md:w-72">
+            <Input
+              placeholder="Search resident, flat, or phone..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              icon={<Search size={16} />}
+            />
+          </div>
+        </div>
+      </GlassCard>
+
+      {/* Flats Table */}
+      <GlassCard className="overflow-hidden bg-white dark:bg-charcoal-800">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[700px]">
-            <thead>
-              <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                <th className="py-3 px-3">Unit / Flat</th>
-                <th className="py-3 px-3">Resident / Owner</th>
-                <th className="py-3 px-3">Contact</th>
-                <th className="py-3 px-3 text-right">Target</th>
-                <th className="py-3 px-3 text-right">Paid</th>
-                <th className="py-3 px-3 text-center">Status</th>
-                <th className="py-3 px-3 text-center">Actions</th>
+          <table className="w-full text-left text-xs sm:text-sm">
+            <thead className="bg-cream-100 dark:bg-charcoal-900 border-b border-cream-border dark:border-charcoal-700 text-charcoal-700 dark:text-charcoal-300 font-bold uppercase tracking-wider text-[11px]">
+              <tr>
+                <th className="py-3.5 px-4">Unit Details</th>
+                <th className="py-3.5 px-4">Resident Name</th>
+                <th className="py-3.5 px-4">Contact</th>
+                <th className="py-3.5 px-4">Target (₹)</th>
+                <th className="py-3.5 px-4">Paid (₹)</th>
+                <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+            <tbody className="divide-y divide-cream-border dark:divide-charcoal-700/60">
               {isLoading ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-charcoal-400">
-                    Loading resident directory…
+                    Loading resident flats...
                   </td>
                 </tr>
               ) : filteredFlats.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-charcoal-400">
-                    No resident flats match your search.
+                    No resident flats found matching criteria.
                   </td>
                 </tr>
               ) : (
-                filteredFlats.map((f) => (
+                filteredFlats.map((flat) => (
                   <tr
-                    key={f.id}
-                    className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                    key={flat.id}
+                    className="hover:bg-cream-50/80 dark:hover:bg-charcoal-700/40 transition-colors"
                   >
-                    <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
-                      {f.block} · Fl {f.floor} · Flat {f.flatNumber}
+                    <td className="py-3.5 px-4">
+                      <div className="font-bold text-charcoal-900 dark:text-cream-50 font-display">
+                        {flat.block} · Flat {flat.flatNumber}
+                      </div>
+                      <div className="text-[11px] text-charcoal-400">{formatOrdinal(flat.floor)} Floor</div>
                     </td>
-
-                    <td className="py-3.5 px-3 font-bold text-charcoal-800 dark:text-cream-200">
-                      {f.ownerName}
+                    <td className="py-3.5 px-4 font-medium text-charcoal-800 dark:text-cream-100">
+                      {flat.ownerName}
                     </td>
-
-                    <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400">
-                      {f.ownerPhone || 'N/A'}
+                    <td className="py-3.5 px-4 text-charcoal-500 dark:text-charcoal-400 font-mono text-xs">
+                      {flat.ownerPhone || '—'}
                     </td>
-
-                    <td className="py-3.5 px-3 text-right font-medium text-charcoal-600 dark:text-charcoal-400">
-                      {formatCurrency(f.expectedAmount)}
+                    <td className="py-3.5 px-4 font-semibold text-charcoal-800 dark:text-cream-100 font-mono">
+                      {formatCurrency(flat.expectedAmount)}
                     </td>
-
-                    <td className="py-3.5 px-3 text-right font-bold text-leaf-700 dark:text-leaf-400">
-                      {formatCurrency(f.totalCollected)}
+                    <td className="py-3.5 px-4 font-bold text-leaf-700 dark:text-leaf-400 font-mono">
+                      {formatCurrency(flat.totalCollected || 0)}
                     </td>
-
-                    <td className="py-3.5 px-3 text-center">
+                    <td className="py-3.5 px-4">
                       <Badge
                         variant={
-                          f.paymentStatus === 'Paid'
+                          flat.paymentStatus === 'Paid'
                             ? 'success'
-                            : f.paymentStatus === 'PartiallyPaid'
+                            : flat.paymentStatus === 'PartiallyPaid'
                             ? 'warning'
-                            : 'neutral'
+                            : 'danger'
                         }
-                        size="sm"
                       >
-                        {f.paymentStatus}
+                        {flat.paymentStatus === 'PartiallyPaid'
+                          ? 'Partial'
+                          : flat.paymentStatus}
                       </Badge>
                     </td>
-
-                    <td className="py-3.5 px-3 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
+                    <td className="py-3.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => handleOpenEditModal(f)}
-                          className="p-1.5 rounded-lg text-charcoal-500 hover:text-gold-600 hover:bg-gold-500/10 transition-colors"
+                          onClick={() => handleOpenEditModal(flat)}
+                          className="p-1.5 rounded-lg hover:bg-cream-200 dark:hover:bg-charcoal-600 text-charcoal-600 dark:text-charcoal-300 transition-colors"
                           title="Edit Flat"
                         >
                           <Edit2 size={15} />
                         </button>
                         <button
-                          onClick={() => handleDelete(f.id)}
-                          className="p-1.5 rounded-lg text-charcoal-500 hover:text-maroon-700 hover:bg-maroon-500/10 transition-colors"
+                          onClick={() => handleDelete(flat.id)}
+                          className="p-1.5 rounded-lg hover:bg-maroon-100 dark:hover:bg-maroon-900/40 text-maroon-700 dark:text-rose-400 transition-colors"
                           title="Delete Flat"
                         >
                           <Trash2 size={15} />
@@ -319,25 +404,117 @@ export const FlatMasterPage: React.FC = () => {
         >
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <Select
-                label="Tower / Block"
-                value={block}
-                onChange={(e) => setBlock(e.target.value)}
-                options={['A-Block', 'B-Block', 'C-Block', 'D-Block'].map((b) => ({
-                  label: b,
-                  value: b,
-                }))}
-              />
+              {/* TOWER / BLOCK SELECTOR */}
+              <div>
+                {!isAddingNewBlock ? (
+                  <Select
+                    label="Tower / Block"
+                    value={block}
+                    onChange={handleBlockSelectChange}
+                    options={[
+                      ...availableBlocks.map((b) => ({
+                        label: b,
+                        value: b,
+                      })),
+                      {
+                        label: '+ Add Block',
+                        value: '__ADD_NEW_BLOCK__',
+                      },
+                    ]}
+                  />
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                      New Block Name *
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        autoFocus
+                        placeholder="e.g. E-Block, Tower-5, Wing-C"
+                        value={newBlockInput}
+                        onChange={(e) => setNewBlockInput(e.target.value)}
+                        className="text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomBlock}
+                        className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0 transition-all shadow-sm"
+                        title="Save Block"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingNewBlock(false);
+                          setNewBlockInput('');
+                        }}
+                        className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300 hover:bg-cream-300 flex-shrink-0 transition-all"
+                        title="Cancel"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
-              <Select
-                label="Floor Level"
-                value={floor}
-                onChange={(e) => setFloor(parseInt(e.target.value))}
-                options={Array.from({ length: 9 }, (_, i) => i + 1).map((f) => ({
-                  label: `${formatOrdinal(f)} Floor`,
-                  value: f,
-                }))}
-              />
+              {/* FLOOR LEVEL SELECTOR */}
+              <div>
+                {!isAddingNewFloor ? (
+                  <Select
+                    label="Floor Level"
+                    value={floor}
+                    onChange={handleFloorSelectChange}
+                    options={[
+                      ...availableFloors.map((f) => ({
+                        label: `${formatOrdinal(f)} Floor`,
+                        value: f,
+                      })),
+                      {
+                        label: '+ Add Floor',
+                        value: '__ADD_NEW_FLOOR__',
+                      },
+                    ]}
+                  />
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-charcoal-700 dark:text-charcoal-200 mb-1.5">
+                      New Floor Number *
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        type="number"
+                        min="1"
+                        autoFocus
+                        placeholder="e.g. 10, 11, 12, 15"
+                        value={newFloorInput}
+                        onChange={(e) => setNewFloorInput(e.target.value)}
+                        className="text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomFloor}
+                        className="p-2.5 rounded-xl bg-saffron-600 text-white hover:bg-saffron-700 flex-shrink-0 transition-all shadow-sm"
+                        title="Add Floor"
+                      >
+                        <Check size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsAddingNewFloor(false);
+                          setNewFloorInput('');
+                        }}
+                        className="p-2.5 rounded-xl bg-cream-200 dark:bg-charcoal-700 text-charcoal-600 dark:text-charcoal-300 hover:bg-cream-300 flex-shrink-0 transition-all"
+                        title="Cancel"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
