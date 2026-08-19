@@ -10,6 +10,7 @@ import { ExpensesPage } from './features/expenses/pages/ExpensesPage';
 import { ReportsPage } from './features/reports/pages/ReportsPage';
 import { UserManagementPage } from './features/users/pages/UserManagementPage';
 import { LoginPage } from './features/auth/pages/LoginPage';
+import { ResetPasswordPage } from './features/auth/pages/ResetPasswordPage';
 
 export const App: React.FC = () => {
   return (
@@ -18,7 +19,7 @@ export const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<LoginPage />} />
         <Route path="/forgot-password" element={<LoginPage />} />
-        <Route path="/reset-password" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Protected App Shell */}
         <Route path="/" element={<AppLayout />}>

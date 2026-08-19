@@ -223,9 +223,13 @@ export const ReportsPage: React.FC = () => {
   }, [expenses]);
 
   const availableBlocks = useMemo(() => {
-    const defaults = ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
-    const fromFlats = flats.map((f) => f.block).filter(Boolean);
-    return ['ALL', ...Array.from(new Set([...defaults, ...fromFlats]))];
+    const fromActiveFlats = Array.from(
+      new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean))
+    );
+    if (fromActiveFlats.length > 0) {
+      return ['ALL', ...fromActiveFlats];
+    }
+    return ['ALL', 'A-Block', 'B-Block', 'C-Block', 'D-Block'];
   }, [flats]);
 
   // Text label of active period filter

@@ -48,7 +48,7 @@ export const FlatMasterPage: React.FC = () => {
 
   // Dynamic available blocks strictly from existing flat records
   const availableBlocks = useMemo(() => {
-    const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+    const fromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     if (fromFlats.length > 0) return fromFlats;
     return ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
   }, [flats]);

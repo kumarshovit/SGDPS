@@ -6,7 +6,6 @@ import {
   useLoginMutation,
   useRegisterMutation,
   useForgotPasswordMutation,
-  useResetPasswordMutation,
 } from '../api/authApiSlice';
 import { setCredentials } from '../slices/authSlice';
 import { Button } from '../../../components/ui/Button';
@@ -19,10 +18,12 @@ import {
   ArrowRight,
   User,
   CheckCircle2,
-  KeyRound,
+  ArrowLeft,
+  Send,
+  AlertCircle,
 } from 'lucide-react';
 
-type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
+type AuthMode = 'login' | 'register' | 'forgot';
 
 export const LoginPage: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -45,8 +46,6 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [resetToken, setResetToken] = useState('');
-  const [newPassword, setNewPassword] = useState('');
 
   // Status & Feedback
   const [errorMsg, setErrorMsg] = useState('');
@@ -55,7 +54,6 @@ export const LoginPage: React.FC = () => {
   const [login, { isLoading: isLoggingIn }] = useLoginMutation();
   const [register, { isLoading: isRegistering }] = useRegisterMutation();
   const [forgotPassword, { isLoading: isSendingReset }] = useForgotPasswordMutation();
-  const [resetPassword, { isLoading: isResetting }] = useResetPasswordMutation();
 
   const dispatch = useAppDispatch();
 
@@ -132,37 +130,13 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await forgotPassword({ email }).unwrap();
       setSuccessMsg(
-        res.message || 'If registered, a password reset token has been generated. You can now reset your password.'
+        res.message || 'A password reset link has been dispatched to your email address. Please check your inbox and click the link to reset your password.'
       );
-      setMode('reset');
     } catch (err: any) {
       setErrorMsg(
         err?.data?.detail ||
           err?.data?.message ||
           'Failed to process password reset request.'
-      );
-    }
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    try {
-      const res = await resetPassword({
-        email,
-        resetToken,
-        newPassword,
-      }).unwrap();
-      setSuccessMsg(res.message || 'Password reset successfully! You can now sign in.');
-      setMode('login');
-      setPassword(newPassword);
-    } catch (err: any) {
-      setErrorMsg(
-        err?.data?.detail ||
-          err?.data?.message ||
-          'Failed to reset password. Please check your reset token.'
       );
     }
   };
@@ -194,8 +168,8 @@ export const LoginPage: React.FC = () => {
       {/* Auth Card */}
       <div className="relative z-10 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white/80 dark:bg-charcoal-800/80 backdrop-blur-xl border border-cream-border dark:border-charcoal-700 py-8 px-6 sm:px-8 rounded-3xl shadow-xl space-y-6">
-          {/* Segmented Mode Switcher */}
-          <div className="grid grid-cols-3 gap-1 p-1 bg-cream-100 dark:bg-charcoal-900 rounded-2xl border border-cream-border dark:border-charcoal-700">
+          {/* Segmented Mode Switcher (2 Tabs Only: Sign In & New Admin) */}
+          <div className="grid grid-cols-2 gap-1 p-1 bg-cream-100 dark:bg-charcoal-900 rounded-2xl border border-cream-border dark:border-charcoal-700">
             <button
               type="button"
               onClick={() => {
@@ -204,7 +178,7 @@ export const LoginPage: React.FC = () => {
                 setSuccessMsg('');
               }}
               className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                mode === 'login'
+                mode === 'login' || mode === 'forgot'
                   ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
                   : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
               }`}
@@ -226,34 +200,19 @@ export const LoginPage: React.FC = () => {
             >
               New Admin
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('forgot');
-                setErrorMsg('');
-                setSuccessMsg('');
-              }}
-              className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                mode === 'forgot' || mode === 'reset'
-                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
-                  : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
-              }`}
-            >
-              Reset Pass
-            </button>
           </div>
 
           {/* Feedback Alerts */}
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-maroon-500/10 border border-maroon-500/30 text-maroon-700 dark:text-rose-400 text-xs flex items-start gap-2 animate-in fade-in">
-              <span className="font-bold">⚠️</span>
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
             <div className="p-3.5 rounded-xl bg-leaf-500/10 border border-leaf-500/30 text-leaf-700 dark:text-leaf-300 text-xs flex items-start gap-2 animate-in fade-in">
-              <CheckCircle2 size={16} className="text-leaf-600 flex-shrink-0 mt-0.5" />
+              <CheckCircle2 size={16} className="text-leaf-600 shrink-0 mt-0.5" />
               <span>{successMsg}</span>
             </div>
           )}
@@ -287,6 +246,7 @@ export const LoginPage: React.FC = () => {
                     onClick={() => {
                       setMode('forgot');
                       setErrorMsg('');
+                      setSuccessMsg('');
                     }}
                     className="text-xs font-bold text-saffron-600 dark:text-gold-400 hover:underline"
                   >
@@ -367,9 +327,14 @@ export const LoginPage: React.FC = () => {
           {/* 3. Forgot Password Form */}
           {mode === 'forgot' && (
             <form className="space-y-4" onSubmit={handleForgotPassword}>
-              <p className="text-xs text-charcoal-500 dark:text-charcoal-400">
-                Enter your registered admin email address to receive password recovery instructions.
-              </p>
+              <div>
+                <h3 className="text-sm font-bold text-charcoal-900 dark:text-cream-50">
+                  Password Recovery
+                </h3>
+                <p className="text-xs text-charcoal-500 dark:text-charcoal-400 mt-0.5">
+                  Enter your registered admin email address. We will send a secure password reset link directly to your inbox.
+                </p>
+              </div>
 
               <Input
                 label="Registered Email *"
@@ -386,65 +351,24 @@ export const LoginPage: React.FC = () => {
                 variant="primary"
                 className="w-full py-3 text-sm font-bold"
                 isLoading={isSendingReset}
-                rightIcon={<KeyRound size={16} />}
+                rightIcon={<Send size={16} />}
               >
-                Send Password Reset Token
+                Send Password Reset Link
               </Button>
 
               <div className="text-center pt-2">
                 <button
                   type="button"
-                  onClick={() => setMode('reset')}
-                  className="text-xs text-saffron-600 dark:text-gold-400 font-bold hover:underline"
+                  onClick={() => {
+                    setMode('login');
+                    setErrorMsg('');
+                    setSuccessMsg('');
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs text-charcoal-500 hover:text-saffron-600 dark:text-charcoal-400 dark:hover:text-gold-400 font-bold transition-colors"
                 >
-                  Already have a reset token? Enter it here →
+                  <ArrowLeft size={13} /> Back to Sign In
                 </button>
               </div>
-            </form>
-          )}
-
-          {/* 4. Reset Password Form */}
-          {mode === 'reset' && (
-            <form className="space-y-3.5" onSubmit={handleResetPassword}>
-              <Input
-                label="Registered Email Address *"
-                type="email"
-                required
-                icon={<Mail size={15} />}
-                placeholder="admin@sgdps.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-
-              <Input
-                label="Reset Token *"
-                required
-                autoFocus
-                icon={<KeyRound size={15} />}
-                placeholder="Enter reset token"
-                value={resetToken}
-                onChange={(e) => setResetToken(e.target.value)}
-              />
-
-              <Input
-                label="New Password *"
-                type="password"
-                required
-                icon={<Lock size={15} />}
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full py-3 text-sm font-bold"
-                isLoading={isResetting}
-                rightIcon={<CheckCircle2 size={16} />}
-              >
-                Confirm New Password
-              </Button>
             </form>
           )}
         </div>

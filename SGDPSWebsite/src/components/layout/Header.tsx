@@ -23,7 +23,7 @@ import {
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { useGetFlatsQuery, useCreateBlockMutation, useToggleBlockStatusMutation } from '../../features/flats/api/flatApiSlice';
+import { useGetFlatsQuery, useGetBlocksQuery, useCreateBlockMutation, useToggleBlockStatusMutation } from '../../features/flats/api/flatApiSlice';
 import {
   getSponsorshipCategories,
   saveSponsorshipCategories,
@@ -40,6 +40,12 @@ import {
 
 export interface HeaderProps {
   onMenuClick: () => void;
+}
+
+interface QueuedBlock {
+  name: string;
+  floors: number;
+  flatsPerFloor: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
@@ -64,27 +70,28 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const [categories, setCategories] = useState<string[]>(getSponsorshipCategories());
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [newBlockInput, setNewBlockInput] = useState('');
-  const [pendingNewBlocks, setPendingNewBlocks] = useState<string[]>([]);
+  const [newBlockFloors, setNewBlockFloors] = useState<number>(9);
+  const [newBlockFlatsPerFloor, setNewBlockFlatsPerFloor] = useState<number>(7);
+  const [pendingNewBlocks, setPendingNewBlocks] = useState<QueuedBlock[]>([]);
   const [blockWarning, setBlockWarning] = useState<string>('');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
 
+  const { data: dbBlocks = [] } = useGetBlocksQuery();
   const { data: flats = [] } = useGetFlatsQuery();
   const [createBlock] = useCreateBlockMutation();
   const [toggleBlockStatus] = useToggleBlockStatusMutation();
 
-  // Existing blocks from DB
-  const existingBlocks = useMemo(() => {
-    const fromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
-    if (fromFlats.length > 0) return fromFlats;
-    return ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
-  }, [flats]);
-
   // Sync settings whenever modal opens
   useEffect(() => {
     if (showSettings) {
-      const activeFromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
-      setActiveBlocksList(getActiveBlocks(activeFromFlats));
+      const activeFromDb = dbBlocks.filter((b) => b.isActive).map((b) => b.blockName);
+      if (activeFromDb.length > 0) {
+        setActiveBlocksList(activeFromDb);
+      } else {
+        const activeFromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
+        setActiveBlocksList(getActiveBlocks(activeFromFlats));
+      }
       setDeletePin(getDeletePin());
       setFloorsPerBlock(getGlobalFloorsPerBlock());
       setFlatsPerFloor(getGlobalFlatsPerFloor());
@@ -92,10 +99,12 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       setPendingNewBlocks([]);
       setNewCategoryInput('');
       setNewBlockInput('');
+      setNewBlockFloors(floorsPerBlock || 9);
+      setNewBlockFlatsPerFloor(flatsPerFloor || 7);
       setBlockWarning('');
       setSaveSuccessMsg('');
     }
-  }, [showSettings, flats]);
+  }, [showSettings, dbBlocks, flats]);
 
   const handleLogout = () => {
     dispatch(logout());
@@ -110,8 +119,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     const formatted = formatBlockName(raw);
 
     // Case-insensitive duplicate check against existing and pending blocks
-    const allBlocks = [...activeBlocksList, ...pendingNewBlocks];
-    const isDuplicate = allBlocks.some(
+    const allExisting = [...activeBlocksList, ...pendingNewBlocks.map((b) => b.name)];
+    const isDuplicate = allExisting.some(
       (b) => b.toLowerCase() === formatted.toLowerCase() || b.toLowerCase() === raw.toLowerCase()
     );
 
@@ -120,7 +129,10 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       return;
     }
 
-    setPendingNewBlocks((prev) => [...prev, formatted]);
+    const floors = newBlockFloors > 0 ? newBlockFloors : 9;
+    const units = newBlockFlatsPerFloor > 0 ? newBlockFlatsPerFloor : 7;
+
+    setPendingNewBlocks((prev) => [...prev, { name: formatted, floors, flatsPerFloor: units }]);
     setNewBlockInput('');
     setBlockWarning('');
   };
@@ -129,8 +141,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     setActiveBlocksList((prev) => prev.filter((b) => b !== blockToRemove));
   };
 
-  const handleRemovePendingBlock = (b: string) => {
-    setPendingNewBlocks((prev) => prev.filter((item) => item !== b));
+  const handleRemovePendingBlock = (bName: string) => {
+    setPendingNewBlocks((prev) => prev.filter((item) => item.name !== bName));
   };
 
   const handleAddCategory = () => {
@@ -153,7 +165,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     setIsSavingSettings(true);
     try {
       // 1. Save Active Blocks (remaining active blocks + newly added blocks)
-      const finalBlocks = Array.from(new Set([...activeBlocksList, ...pendingNewBlocks]));
+      const finalBlocks = Array.from(new Set([...activeBlocksList, ...pendingNewBlocks.map((b) => b.name)]));
       saveActiveBlocks(finalBlocks);
 
       // 2. Save PIN & Global dimension defaults
@@ -165,7 +177,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       saveSponsorshipCategories(categories);
 
       // 4. Synchronize block active/inactive status in central DB
-      const allDbBlocks = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+      const allDbBlocks = dbBlocks.map((b) => b.blockName);
 
       // Deactivate any DB blocks not in finalBlocks
       const blocksToDeactivate = allDbBlocks.filter(
@@ -179,8 +191,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         }
       }
 
-      // Activate or Provision blocks in finalBlocks
-      for (const blockName of finalBlocks) {
+      // Re-activate existing active blocks
+      for (const blockName of activeBlocksList) {
         const existsInDb = allDbBlocks.some((b) => b.toLowerCase() === blockName.toLowerCase());
         if (existsInDb) {
           try {
@@ -188,13 +200,16 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           } catch {
             // continue
           }
-        } else {
-          await createBlock({
-            blockName,
-            floors: floorsPerBlock > 0 ? floorsPerBlock : 9,
-            flatsPerFloor: flatsPerFloor > 0 ? flatsPerFloor : 7,
-          }).unwrap();
         }
+      }
+
+      // Provision newly queued blocks with their specified dimensions
+      for (const newBlock of pendingNewBlocks) {
+        await createBlock({
+          blockName: newBlock.name,
+          floors: newBlock.floors,
+          flatsPerFloor: newBlock.flatsPerFloor,
+        }).unwrap();
       }
 
       setSaveSuccessMsg('Settings updated successfully!');
@@ -240,26 +255,33 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between px-4 lg:px-8 glass-header">
-        {/* Left Side: Mobile Menu Button */}
+      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-cream-border dark:border-charcoal-700 bg-cream-50/80 dark:bg-charcoal-900/80 px-4 sm:px-6 backdrop-blur-md transition-colors duration-200">
         <div className="flex items-center gap-3">
           <button
             onClick={onMenuClick}
-            type="button"
-            className="lg:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-cream-border dark:border-charcoal-700 text-charcoal-700 dark:text-cream-200 hover:bg-cream-100 dark:hover:bg-charcoal-700"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-cream-border dark:border-charcoal-700 text-charcoal-700 dark:text-cream-200 hover:bg-cream-100 dark:hover:bg-charcoal-700 transition-colors lg:hidden"
+            aria-label="Toggle Menu"
           >
-            <Menu size={20} />
+            <Menu size={18} />
           </button>
+
+          {/* Quick Breadcrumb / Page context */}
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-saffron-500 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-saffron-700 dark:text-gold-400">
+              SGDPS Portal · 2026
+            </span>
+          </div>
         </div>
 
-        {/* Right Side: Action, Theme Switcher, Profile */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Saffron-to-Gold Add Collection CTA */}
+        {/* Right Action Icons */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Quick Collection Action */}
           <Button
             size="sm"
             variant="primary"
-            onClick={() => navigate('/add')}
             leftIcon={<Plus size={15} />}
+            onClick={() => navigate('/add')}
             className="hidden sm:inline-flex"
           >
             Add Collection
@@ -358,13 +380,13 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                 ))}
                 {pendingNewBlocks.map((b) => (
                   <span
-                    key={b}
+                    key={b.name}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-saffron-500/10 border border-saffron-500/30 text-saffron-700 dark:text-gold-400 animate-in fade-in shadow-sm"
                   >
-                    ✨ {b} (New)
+                    ✨ {b.name} ({b.floors} fl × {b.flatsPerFloor} = {b.floors * b.flatsPerFloor} units)
                     <button
                       type="button"
-                      onClick={() => handleRemovePendingBlock(b)}
+                      onClick={() => handleRemovePendingBlock(b.name)}
                       className="hover:text-rose-600 transition-colors"
                       title="Remove"
                     >
@@ -375,27 +397,52 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               </div>
 
               <p className="text-[11px] text-charcoal-500 dark:text-charcoal-400">
-                💡 Removing a block only removes it from the Block Grid Matrix. All recorded financial collections remain permanently safe in the central database.
+                💡 Removing a block deactivates it from the active grid matrix. All recorded financial collections remain permanently safe in the central database.
               </p>
 
-              {/* Add New Block Input Box with Button */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="Enter letter (e.g. E, F, G, H) or block name"
-                    value={newBlockInput}
-                    onChange={(e) => {
-                      setNewBlockInput(e.target.value);
-                      if (blockWarning) setBlockWarning('');
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleAddBlockToQueue();
-                      }
-                    }}
-                    className="text-xs"
-                  />
+              {/* Add New Block Input Box with Dimension Customization */}
+              <div className="space-y-2 pt-2 border-t border-cream-border dark:border-charcoal-700">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="sm:col-span-1">
+                    <Input
+                      label="Block / Tower Name"
+                      placeholder="e.g. E, F, Tower-5"
+                      value={newBlockInput}
+                      onChange={(e) => {
+                        setNewBlockInput(e.target.value);
+                        if (blockWarning) setBlockWarning('');
+                      }}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      label="Floors (Default: 9)"
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={newBlockFloors}
+                      onChange={(e) => setNewBlockFloors(parseInt(e.target.value) || 9)}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      label="Flats / Floor (Default: 7)"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={newBlockFlatsPerFloor}
+                      onChange={(e) => setNewBlockFlatsPerFloor(parseInt(e.target.value) || 7)}
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-charcoal-500 dark:text-charcoal-400">
+                    ℹ️ Will provision <strong>{newBlockFloors * newBlockFlatsPerFloor} flat units</strong> ({newBlockFloors} floors × {newBlockFlatsPerFloor} flats/floor)
+                  </span>
                   <Button
                     type="button"
                     size="sm"
@@ -406,6 +453,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                     Add Block
                   </Button>
                 </div>
+
                 {blockWarning && (
                   <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 animate-in fade-in">
                     ⚠️ {blockWarning}

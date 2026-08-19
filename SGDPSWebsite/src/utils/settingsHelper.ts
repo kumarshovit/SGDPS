@@ -47,7 +47,10 @@ export const formatBlockName = (input: string): string => {
   return trimmed;
 };
 
-export const getActiveBlocks = (flatsBlocks: string[] = []): string[] => {
+export const getActiveBlocks = (activeFlatsBlocks: string[] = []): string[] => {
+  if (activeFlatsBlocks && activeFlatsBlocks.length > 0) {
+    return Array.from(new Set(activeFlatsBlocks));
+  }
   try {
     const saved = localStorage.getItem('sgdps_active_blocks');
     if (saved) {
@@ -57,8 +60,7 @@ export const getActiveBlocks = (flatsBlocks: string[] = []): string[] => {
   } catch {
     // fallback
   }
-  const combined = Array.from(new Set([...DEFAULT_BLOCKS, ...flatsBlocks]));
-  return combined.length > 0 ? combined : DEFAULT_BLOCKS;
+  return DEFAULT_BLOCKS;
 };
 
 export const saveActiveBlocks = (blocks: string[]): void => {

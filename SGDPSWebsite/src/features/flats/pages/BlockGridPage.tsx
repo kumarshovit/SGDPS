@@ -57,17 +57,18 @@ export const BlockGridPage: React.FC = () => {
   }, [collectors]);
 
   const [activeBlocks, setActiveBlocks] = useState<string[]>(() => {
-    const fromFlats = Array.from(new Set(flatsData.map((f) => f.block).filter(Boolean)));
+    const fromFlats = Array.from(new Set(flatsData.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     return getActiveBlocks(fromFlats);
   });
 
   // Keep active blocks in sync with database and settings
   useEffect(() => {
-    const fromFlats = Array.from(new Set(flatsData.map((f) => f.block).filter(Boolean)));
+    const fromFlats = Array.from(new Set(flatsData.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     setActiveBlocks(getActiveBlocks(fromFlats));
 
     const handleSettingsUpdated = () => {
-      setActiveBlocks(getActiveBlocks(fromFlats));
+      const activeFlats = Array.from(new Set(flatsData.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
+      setActiveBlocks(getActiveBlocks(activeFlats));
     };
 
     window.addEventListener('sgdps_settings_updated', handleSettingsUpdated);

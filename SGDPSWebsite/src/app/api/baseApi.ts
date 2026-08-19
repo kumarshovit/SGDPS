@@ -19,6 +19,7 @@ export const baseApi = createApi({
     'Auth',
     'Dashboard',
     'Flats',
+    'Blocks',
     'BlockGrid',
     'Collections',
     'Expenses',

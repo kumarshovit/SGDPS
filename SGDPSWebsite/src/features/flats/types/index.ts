@@ -48,3 +48,13 @@ export interface UpdateFlatInput extends CreateFlatInput {
   id: number;
   isActive: boolean;
 }
+
+export interface BlockItem {
+  blockName: string;
+  floors: number;
+  flatsPerFloor: number;
+  totalUnits: number;
+  activeUnits: number;
+  expectedAmount: number;
+  isActive: boolean;
+}
