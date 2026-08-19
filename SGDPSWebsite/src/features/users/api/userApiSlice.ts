@@ -15,10 +15,28 @@ export const userApiSlice = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Users'],
     }),
+    updateUserName: builder.mutation<Collector, { id: number; firstName: string; lastName?: string }>({
+      query: ({ id, ...body }) => ({
+        url: `/users/${id}/name`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['Users'],
+    }),
+    updateUserStatus: builder.mutation<Collector, { id: number; isActive: boolean }>({
+      query: ({ id, isActive }) => ({
+        url: `/users/${id}/status`,
+        method: 'PUT',
+        body: { isActive },
+      }),
+      invalidatesTags: ['Users'],
+    }),
   }),
 });
 
 export const {
   useGetCollectorsQuery,
   useCreateCollectorMutation,
+  useUpdateUserNameMutation,
+  useUpdateUserStatusMutation,
 } = userApiSlice;

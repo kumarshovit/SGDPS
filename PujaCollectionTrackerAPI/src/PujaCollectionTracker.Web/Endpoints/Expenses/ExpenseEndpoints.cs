@@ -77,22 +77,24 @@ public class ListExpensesEndpoint(AppDbContext db) : Endpoint<ListExpensesQuery,
         (e.Remarks != null && e.Remarks.ToLower().Contains(s)));
     }
 
-    var list = await query
+    var items = await query
       .OrderByDescending(e => e.ExpenseDate)
-      .Select(e => new ExpenseDto(
-        e.Id,
-        e.ExpenseDate,
-        e.Category,
-        e.Description,
-        e.Amount,
-        e.PaymentMode.ToString(),
-        e.PaidToVendor,
-        e.BillAttachmentUrl,
-        e.Remarks,
-        e.RecordedByUserId,
-        e.RecordedByName,
-        e.CreatedAt))
+      .ThenByDescending(e => e.Id)
       .ToListAsync(ct);
+
+    var list = items.Select(e => new ExpenseDto(
+      e.Id,
+      DateTime.SpecifyKind(e.ExpenseDate, DateTimeKind.Utc),
+      e.Category,
+      e.Description,
+      e.Amount,
+      e.PaymentMode.ToString(),
+      e.PaidToVendor,
+      e.BillAttachmentUrl,
+      e.Remarks,
+      e.RecordedByUserId,
+      e.RecordedByName,
+      DateTime.SpecifyKind(e.CreatedAt, DateTimeKind.Utc))).ToList();
 
     return TypedResults.Ok(list);
   }
@@ -115,10 +117,12 @@ public class CreateExpenseEndpoint(AppDbContext db) : Endpoint<CreateExpenseRequ
       return TypedResults.Problem(detail: "Expense amount must be greater than 0", statusCode: 400);
 
     var mode = Enum.TryParse<PaymentMode>(req.PaymentMode, true, out var parsedMode) ? parsedMode : PaymentMode.Cash;
+    var expenseDate = req.ExpenseDate == default ? DateTime.UtcNow : DateTime.SpecifyKind(req.ExpenseDate, DateTimeKind.Utc);
+    var now = DateTime.UtcNow;
 
     var expense = new Expense
     {
-      ExpenseDate = req.ExpenseDate == default ? DateTime.UtcNow : req.ExpenseDate,
+      ExpenseDate = expenseDate,
       Category = string.IsNullOrWhiteSpace(req.Category) ? "Miscellaneous" : req.Category.Trim(),
       Description = req.Description.Trim(),
       Amount = req.Amount,
@@ -128,7 +132,7 @@ public class CreateExpenseEndpoint(AppDbContext db) : Endpoint<CreateExpenseRequ
       Remarks = req.Remarks?.Trim(),
       RecordedByUserId = req.RecordedByUserId ?? "admin_1",
       RecordedByName = req.RecordedByName ?? "Admin",
-      CreatedAt = DateTime.UtcNow
+      CreatedAt = now
     };
 
     db.Expenses.Add(expense);
@@ -136,7 +140,7 @@ public class CreateExpenseEndpoint(AppDbContext db) : Endpoint<CreateExpenseRequ
 
     var dto = new ExpenseDto(
       expense.Id,
-      expense.ExpenseDate,
+      DateTime.SpecifyKind(expense.ExpenseDate, DateTimeKind.Utc),
       expense.Category,
       expense.Description,
       expense.Amount,
@@ -146,7 +150,7 @@ public class CreateExpenseEndpoint(AppDbContext db) : Endpoint<CreateExpenseRequ
       expense.Remarks,
       expense.RecordedByUserId,
       expense.RecordedByName,
-      expense.CreatedAt);
+      DateTime.SpecifyKind(expense.CreatedAt, DateTimeKind.Utc));
 
     return TypedResults.Created($"/expenses/{expense.Id}", dto);
   }

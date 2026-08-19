@@ -51,28 +51,41 @@ public class ListCollectorsEndpoint(AppDbContext db) : EndpointWithoutRequest<Re
       .Where(u => userRoles.Contains(u.Id))
       .ToListAsync(ct);
 
-    var today = DateTime.UtcNow.Date;
+    var collections = await db.PaymentCollections.AsNoTracking().ToListAsync(ct);
+    var todayStr = DateTime.UtcNow.AddHours(5.5).ToString("yyyy-MM-dd");
 
     var list = new List<CollectorDto>();
 
     foreach (var u in users)
     {
       var uIdStr = u.Id.Value.ToString();
-      var uCollections = collections.Where(c => c.CollectedByUserId == uIdStr || c.CollectedByUserId == u.Email).ToList();
-      var todayCollections = uCollections.Where(c => c.CollectionDateTime.Date == today).ToList();
+      var fullName = $"{u.FirstName} {u.LastName}".Trim();
+      var firstName = u.FirstName.Trim();
+
+      var uCollections = collections.Where(c =>
+        c.CollectedByUserId == uIdStr ||
+        string.Equals(c.CollectedByUserId, u.Email, StringComparison.OrdinalIgnoreCase) ||
+        (!string.IsNullOrWhiteSpace(c.CollectedByName) && (
+          string.Equals(c.CollectedByName.Trim(), fullName, StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(c.CollectedByName.Trim(), firstName, StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(c.CollectedByName.Trim(), u.Email, StringComparison.OrdinalIgnoreCase)
+        ))
+      ).ToList();
+
+      var todayCollections = uCollections.Where(c => c.CollectionDateTime.AddHours(5.5).ToString("yyyy-MM-dd") == todayStr).ToList();
 
       list.Add(new CollectorDto(
         u.Id.Value,
         u.FirstName,
         u.LastName,
-        $"{u.FirstName} {u.LastName}".Trim(),
+        fullName,
         u.Email,
         u.IsActive,
         uCollections.Sum(c => c.Amount),
         uCollections.Count,
         todayCollections.Sum(c => c.Amount),
         todayCollections.Count,
-        u.CreatedOn));
+        DateTime.SpecifyKind(u.CreatedOn, DateTimeKind.Utc)));
     }
 
     return TypedResults.Ok(list.OrderByDescending(c => c.TotalCollected).ToList());
@@ -135,5 +148,102 @@ public class CreateCollectorEndpoint(AppDbContext db, IPasswordHasher hasher) : 
       user.CreatedOn);
 
     return TypedResults.Created($"/users/collectors/{user.Id.Value}", dto);
+  }
+}
+
+public record UpdateUserNameRequest(string FirstName, string? LastName);
+
+// PUT /api/users/{id}/name
+public class UpdateUserNameEndpoint(AppDbContext db) : Endpoint<UpdateUserNameRequest, Results<Ok<CollectorDto>, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Put("/users/{id:int}/name");
+    AllowAnonymous();
+    Tags("Users");
+    Summary(s => s.Summary = "Update user first and last name");
+  }
+
+  public override async Task<Results<Ok<CollectorDto>, ProblemHttpResult>> ExecuteAsync(UpdateUserNameRequest req, CancellationToken ct)
+  {
+    var id = Route<int>("id");
+    if (string.IsNullOrWhiteSpace(req.FirstName))
+      return TypedResults.Problem(detail: "First Name is required", statusCode: 400);
+
+    var userId = UserId.From(id);
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+    if (user == null)
+      return TypedResults.Problem(detail: "User not found", statusCode: 404);
+
+    user.UpdateName(req.FirstName.Trim(), req.LastName?.Trim());
+    await db.SaveChangesAsync(ct);
+
+    var collections = await db.PaymentCollections.Where(c => c.CollectedByUserId == id.ToString()).ToListAsync(ct);
+
+    var dto = new CollectorDto(
+      user.Id.Value,
+      user.FirstName,
+      user.LastName,
+      $"{user.FirstName} {user.LastName}".Trim(),
+      user.Email,
+      user.IsActive,
+      collections.Sum(c => c.Amount),
+      collections.Count,
+      0m,
+      0,
+      user.CreatedOn);
+
+    return TypedResults.Ok(dto);
+  }
+}
+
+public record UpdateUserStatusRequest(bool IsActive);
+
+// PUT /api/users/{id}/status
+public class UpdateUserStatusEndpoint(AppDbContext db) : Endpoint<UpdateUserStatusRequest, Results<Ok<CollectorDto>, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Put("/users/{id:int}/status");
+    AllowAnonymous();
+    Tags("Users");
+    Summary(s => s.Summary = "Toggle user active/inactive status");
+  }
+
+  public override async Task<Results<Ok<CollectorDto>, ProblemHttpResult>> ExecuteAsync(UpdateUserStatusRequest req, CancellationToken ct)
+  {
+    var id = Route<int>("id");
+    var userId = UserId.From(id);
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+    if (user == null)
+      return TypedResults.Problem(detail: "User not found", statusCode: 404);
+
+    if (req.IsActive)
+    {
+      user.Activate();
+    }
+    else
+    {
+      user.Deactivate();
+    }
+
+    await db.SaveChangesAsync(ct);
+
+    var collections = await db.PaymentCollections.Where(c => c.CollectedByUserId == id.ToString()).ToListAsync(ct);
+
+    var dto = new CollectorDto(
+      user.Id.Value,
+      user.FirstName,
+      user.LastName,
+      $"{user.FirstName} {user.LastName}".Trim(),
+      user.Email,
+      user.IsActive,
+      collections.Sum(c => c.Amount),
+      collections.Count,
+      0m,
+      0,
+      user.CreatedOn);
+
+    return TypedResults.Ok(dto);
   }
 }

@@ -72,6 +72,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
       amount: amount,
       mode: _paymentMode,
       collectorName: auth.user?.fullName ?? 'Collector',
+      collectorUserId: auth.user?.id?.toString(),
       referenceNo: _referenceController.text.trim().isNotEmpty ? _referenceController.text.trim() : null,
       remarks: _remarksController.text.trim().isNotEmpty ? _remarksController.text.trim() : null,
     );

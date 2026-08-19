@@ -34,6 +34,14 @@ export const flatApiSlice = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Flats', 'BlockGrid', 'Dashboard', 'Reports'],
     }),
+    createBlock: builder.mutation<Flat[], { blockName: string; floors?: number; flatsPerFloor?: number }>({
+      query: (body) => ({
+        url: '/flats/create-block',
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: ['Flats', 'BlockGrid', 'Dashboard', 'Reports'],
+    }),
   }),
 });
 
@@ -41,6 +49,7 @@ export const {
   useGetFlatsQuery,
   useGetBlockGridSummaryQuery,
   useCreateFlatMutation,
+  useCreateBlockMutation,
   useUpdateFlatMutation,
   useDeleteFlatMutation,
 } = flatApiSlice;

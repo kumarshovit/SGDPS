@@ -6,7 +6,7 @@ import {
 import { useGetCollectionsQuery } from '../../collections/api/collectionApiSlice';
 import { useGetExpensesQuery } from '../../expenses/api/expenseApiSlice';
 import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
-import { formatCurrency, formatDateTime, formatDate } from '../../../utils/formatters';
+import { formatCurrency, formatPdfCurrency, formatDateTime, formatDate, parseDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
@@ -68,8 +68,8 @@ export const ReportsPage: React.FC = () => {
     if (!dateStr) return true;
     if (datePreset === 'all_time') return true;
 
-    const target = new Date(dateStr);
-    if (isNaN(target.getTime())) return true;
+    const target = parseDateTime(dateStr);
+    if (!target) return true;
 
     const now = new Date();
 
@@ -228,31 +228,39 @@ export const ReportsPage: React.FC = () => {
     if (exportFormat === 'pdf') {
       if (reportType === 'collection_vs_expense') {
         const rows = [
-          ['Total Period Collections (Inflows)', formatCurrency(periodCollectionTotal)],
-          ['Total Period Expenses (Outflows)', formatCurrency(periodExpenseTotal)],
-          ['Net Available Period Balance', formatCurrency(periodNetBalance)],
-          ['Collection Entries Logged', filteredCollections.length.toString()],
-          ['Expense Vouchers Logged', filteredExpenses.length.toString()],
+          ['Total Period Collections (Inflows)', formatPdfCurrency(periodCollectionTotal)],
+          ['Total Period Expenses (Outflows)', formatPdfCurrency(periodExpenseTotal)],
+          ['Net Available Period Balance', formatPdfCurrency(periodNetBalance)],
+          ['Collection Entries Logged', `${filteredCollections.length} entries`],
+          ['Expenses Logged', `${filteredExpenses.length} records`],
           ['Report Filter Period', dateLabel],
         ];
         exportToPdf(
-          `Financial Balance Statement (${dateLabel})`,
+          `Total Collection vs. Total Expenses Statement (${dateLabel})`,
           ['Audit Line Item', 'Amount / Value'],
           rows,
-          `SGDPS_Financial_Statement_${datePreset}`
+          `SGDPS_Total_Collection_vs_Expenses_${datePreset}`
         );
       } else if (reportType === 'category_expenses') {
         const rows = categoryStats.map((c) => [
           c.category,
-          `${c.count} vouchers`,
-          formatCurrency(c.total),
+          formatPdfCurrency(c.total),
           `${c.percentage}%`,
         ]);
+        const footRows = [
+          [
+            { content: 'Total Outflows', styles: { halign: 'left', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(periodExpenseTotal), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: '100%', styles: { halign: 'right', fontStyle: 'bold' } },
+          ],
+        ];
         exportToPdf(
           `Category-wise Expense Breakdown (${dateLabel})`,
-          ['Category', 'Count', 'Total Amount', 'Budget Share'],
+          ['Category', 'Total Amount (Rs.)', 'Expense Share'],
           rows,
-          `SGDPS_Category_Expenses_${datePreset}`
+          `SGDPS_Category_Expenses_${datePreset}`,
+          `Total Expenses: ${formatPdfCurrency(periodExpenseTotal)} across ${categoryStats.length} Categories`,
+          footRows
         );
       } else if (reportType === 'date_wise_expenses') {
         const rows = filteredExpenses.map((e) => [
@@ -261,13 +269,22 @@ export const ReportsPage: React.FC = () => {
           e.description,
           e.paidToVendor || '—',
           e.paymentMode,
-          formatCurrency(e.amount),
+          formatPdfCurrency(e.amount),
         ]);
+        const footRows = [
+          [
+            { content: 'Total Expenses', colSpan: 3, styles: { halign: 'left', fontStyle: 'bold' } },
+            { content: `${filteredExpenses.length} records`, colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
+            { content: `-${formatPdfCurrency(periodExpenseTotal)}`, styles: { halign: 'right', fontStyle: 'bold' } },
+          ],
+        ];
         exportToPdf(
           `Expenses Ledger (${dateLabel})`,
-          ['Date', 'Category', 'Description', 'Vendor', 'Mode', 'Amount'],
+          ['Date', 'Category', 'Description', 'Vendor', 'Mode', 'Amount (Rs.)'],
           rows,
-          `SGDPS_Expenses_Ledger_${datePreset}`
+          `SGDPS_Expenses_Ledger_${datePreset}`,
+          `Total Filtered Expenses: ${formatPdfCurrency(periodExpenseTotal)} (${filteredExpenses.length} entries)`,
+          footRows
         );
       } else if (reportType === 'collections_register') {
         const rows = filteredCollections.map((c) => [
@@ -276,28 +293,36 @@ export const ReportsPage: React.FC = () => {
           c.donorResidentName || 'Resident',
           c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation'),
           c.mode,
-          formatCurrency(c.amount),
+          formatPdfCurrency(c.amount),
         ]);
+        const footRows = [
+          [
+            { content: 'Total Collection', colSpan: 3, styles: { halign: 'left', fontStyle: 'bold' } },
+            { content: `${filteredCollections.length} entries`, colSpan: 2, styles: { halign: 'center', fontStyle: 'bold' } },
+            { content: `+${formatPdfCurrency(periodCollectionTotal)}`, styles: { halign: 'right', fontStyle: 'bold' } },
+          ],
+        ];
         exportToPdf(
           `Collections & Inflows Register (${dateLabel})`,
-          ['Receipt #', 'Date', 'Donor / Resident', 'Flat / Source', 'Mode', 'Amount'],
+          ['Receipt #', 'Date', 'Donor / Resident', 'Flat / Source', 'Mode', 'Amount (Rs.)'],
           rows,
-          `SGDPS_Collections_Register_${datePreset}`
+          `SGDPS_Collections_Register_${datePreset}`,
+          `Total Filtered Collection: ${formatPdfCurrency(periodCollectionTotal)} (${filteredCollections.length} entries)`,
+          footRows
         );
       } else if (reportType === 'defaulters') {
         const rows = filteredDefaulters.map((d) => [
           `${d.block} · Fl ${d.floor} · Flat ${d.flatNumber}`,
           d.ownerName,
           d.ownerPhone || '—',
-          formatCurrency(d.expectedAmount),
-          formatCurrency(d.paidAmount),
-          formatCurrency(d.pendingAmount),
+          'Unpaid',
         ]);
         exportToPdf(
-          `Outstanding Defaulters Recovery Statement`,
-          ['Flat & Tower', 'Resident', 'Phone', 'Target', 'Paid', 'Pending Due'],
+          `Unpaid Flats Statement (${dateLabel})`,
+          ['Flat & Tower', 'Resident', 'Phone', 'Status'],
           rows,
-          `SGDPS_Pending_Defaulters`
+          `SGDPS_Unpaid_Flats`,
+          `Total Unpaid Units: ${filteredDefaulters.length} Flats`
         );
       }
     } else {
@@ -305,11 +330,29 @@ export const ReportsPage: React.FC = () => {
       if (reportType === 'category_expenses') {
         exportCategoryExpensesToExcel(categoryStats);
       } else if (reportType === 'date_wise_expenses') {
-        exportExpensesToExcel(filteredExpenses);
+        const data: any[] = filteredExpenses.map((e) => ({
+          Date: formatDateTime(e.expenseDate),
+          Category: e.category,
+          Description: e.description,
+          'Amount (Rs)': e.amount,
+          'Payment Mode': e.paymentMode,
+          Vendor: e.paidToVendor || '',
+          Remarks: e.remarks || '',
+        }));
+        data.push({
+          Date: 'TOTAL EXPENSES',
+          Category: '',
+          Description: `${filteredExpenses.length} entries`,
+          'Amount (Rs)': periodExpenseTotal,
+          'Payment Mode': '',
+          Vendor: '',
+          Remarks: '',
+        });
+        exportToExcel(data, `SGDPS_Expenses_${datePreset}`);
       } else if (reportType === 'defaulters') {
         exportDefaultersToExcel(filteredDefaulters);
       } else if (reportType === 'collections_register') {
-        const data = filteredCollections.map((c) => ({
+        const data: any[] = filteredCollections.map((c) => ({
           'Receipt No': c.receiptNumber || `REC-${c.id}`,
           Date: formatDateTime(c.collectionDateTime),
           'Resident / Donor': c.donorResidentName,
@@ -319,6 +362,16 @@ export const ReportsPage: React.FC = () => {
           'Collected By': c.collectedByName,
           'Txn Reference': c.transactionReference || '',
         }));
+        data.push({
+          'Receipt No': 'TOTAL COLLECTION',
+          Date: '',
+          'Resident / Donor': '',
+          'Flat / Source': `${filteredCollections.length} entries`,
+          'Amount (Rs)': periodCollectionTotal,
+          'Payment Mode': '',
+          'Collected By': '',
+          'Txn Reference': '',
+        });
         exportToExcel(data, `SGDPS_Collections_${datePreset}`);
       } else {
         const data = [
@@ -389,49 +442,6 @@ export const ReportsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 3 Core Filter-Aware KPI Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-leaf-600 dark:text-leaf-400">
-            <span className="flex items-center gap-1.5">
-              <TrendingUp size={16} />
-              Total Inflows ({activePeriodLabel})
-            </span>
-            <Badge variant="success" size="sm">{filteredCollections.length} Entries</Badge>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-leaf-700 dark:text-leaf-300 mt-2 font-mono">
-            {formatCurrency(periodCollectionTotal)}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-saffron-600 dark:text-gold-400">
-            <span className="flex items-center gap-1.5">
-              <CreditCard size={16} />
-              Total Expenses ({activePeriodLabel})
-            </span>
-            <Badge variant="warning" size="sm">{filteredExpenses.length} Vouchers</Badge>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-saffron-700 dark:text-gold-300 mt-2 font-mono">
-            {formatCurrency(periodExpenseTotal)}
-          </div>
-        </GlassCard>
-
-        <GlassCard className="p-4 bg-white dark:bg-charcoal-800">
-          <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-charcoal-700 dark:text-cream-200">
-            <span className="flex items-center gap-1.5 text-gold-600 dark:text-gold-300">
-              <Wallet size={16} />
-              Period Balance
-            </span>
-            <Badge variant={periodNetBalance >= 0 ? 'success' : 'danger'} size="sm">
-              {periodNetBalance >= 0 ? 'Surplus' : 'Deficit'}
-            </Badge>
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-charcoal-900 dark:text-cream-50 mt-2 font-mono">
-            {formatCurrency(periodNetBalance)}
-          </div>
-        </GlassCard>
-      </div>
 
       {/* Sonora-Style Filter Form Card */}
       <GlassCard title="Report Criteria & Filter Options" className="p-5 bg-white dark:bg-charcoal-800">
@@ -443,11 +453,11 @@ export const ReportsPage: React.FC = () => {
               value={reportType}
               onChange={(e) => setReportType(e.target.value as ReportType)}
               options={[
-                { label: '📊 1. Total Collection vs. Total Expenses & Balance Sheet', value: 'collection_vs_expense' },
+                { label: '📊 1. Total Collection vs. Total Expenses Statement', value: 'collection_vs_expense' },
                 { label: '🏷️ 2. Category-wise Expenses Breakdown', value: 'category_expenses' },
                 { label: '📅 3. Date / Month-wise Expenses Ledger', value: 'date_wise_expenses' },
                 { label: '📥 4. Payment & Collection Entries Register', value: 'collections_register' },
-                { label: '⚠️ 5. Outstanding Defaulters Recovery Report', value: 'defaulters' },
+                { label: '⚠️ 5. Unpaid / Pending Units Statement', value: 'defaulters' },
               ]}
             />
           </div>
@@ -601,10 +611,10 @@ export const ReportsPage: React.FC = () => {
 
                 <tr className="hover:bg-cream-50/50 dark:hover:bg-charcoal-700/30">
                   <td className="py-3.5 px-4 font-bold text-charcoal-900 dark:text-cream-50">
-                    Total Society & Puja Expenses (Vouchers Payouts)
+                    Total Society & Puja Expenses (Payouts)
                   </td>
                   <td className="py-3.5 px-4 text-charcoal-600 dark:text-charcoal-300 font-medium">
-                    {filteredExpenses.length} vouchers
+                    {filteredExpenses.length} records
                   </td>
                   <td className="py-3.5 px-4 text-right font-extrabold text-maroon-700 dark:text-rose-400 font-mono text-base">
                     -{formatCurrency(periodExpenseTotal)}
@@ -645,16 +655,15 @@ export const ReportsPage: React.FC = () => {
           {isExpensesLoading ? (
             <div className="text-xs text-charcoal-400 py-12 text-center">Loading category expenses…</div>
           ) : categoryStats.length === 0 ? (
-            <div className="text-xs text-charcoal-400 py-12 text-center">No expense vouchers recorded for this period.</div>
+            <div className="text-xs text-charcoal-400 py-12 text-center">No expense records found for this period.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400 uppercase">
                     <th className="py-3 px-3">Expense Category</th>
-                    <th className="py-3 px-3">Vouchers Count</th>
                     <th className="py-3 px-3 text-right">Total Amount (₹)</th>
-                    <th className="py-3 px-3 text-right">Budget Share (%)</th>
+                    <th className="py-3 px-3 text-right">Expense Share (%)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
@@ -666,10 +675,6 @@ export const ReportsPage: React.FC = () => {
                       <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50 flex items-center gap-2">
                         <span className="h-2 w-2 rounded-full bg-saffron-600" />
                         {c.category}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-charcoal-600 dark:text-charcoal-300 font-medium">
-                        {c.count} voucher(s)
                       </td>
 
                       <td className="py-3.5 px-3 text-right font-extrabold text-charcoal-900 dark:text-cream-50 font-mono text-sm">
@@ -691,7 +696,7 @@ export const ReportsPage: React.FC = () => {
       {/* REPORT 3: Date / Month-wise Expenses Ledger */}
       {reportType === 'date_wise_expenses' && (
         <GlassCard
-          title={`Detailed Expense Vouchers Ledger (${activePeriodLabel})`}
+          title={`Detailed Expense Ledger (${activePeriodLabel})`}
           subtitle={`Showing ${filteredExpenses.length} entries (Total: ${formatCurrency(periodExpenseTotal)})`}
         >
           {isExpensesLoading ? (
@@ -750,6 +755,16 @@ export const ReportsPage: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-cream-50/80 dark:bg-charcoal-900/80 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
+                    <td colSpan={5} className="py-3 px-3 text-charcoal-900 dark:text-cream-50 font-bold">
+                      Total Expenses ({filteredExpenses.length} entries)
+                    </td>
+                    <td className="py-3 px-3 text-right font-extrabold text-maroon-700 dark:text-rose-400 font-mono text-sm">
+                      -{formatCurrency(periodExpenseTotal)}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
@@ -811,41 +826,49 @@ export const ReportsPage: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="bg-cream-50/80 dark:bg-charcoal-900/80 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
+                    <td colSpan={5} className="py-3 px-3 text-charcoal-900 dark:text-cream-50 font-bold">
+                      Total Collections ({filteredCollections.length} entries)
+                    </td>
+                    <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                      +{formatCurrency(periodCollectionTotal)}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           )}
         </GlassCard>
       )}
 
-      {/* REPORT 5: Outstanding Defaulters Recovery */}
+      {/* REPORT 5: Unpaid / Pending Flats Statement */}
       {reportType === 'defaulters' && (
         <GlassCard
-          title={`Outstanding Defaulters Recovery (${filteredDefaulters.length} Flats)`}
-          subtitle={`Total Unpaid Balance: ${formatCurrency(filteredDefaulters.reduce((s, d) => s + d.pendingAmount, 0))}`}
+          title={`Unpaid Flats Statement (${filteredDefaulters.length} Units)`}
+          subtitle={`Flats with zero recorded collection payments`}
         >
           {isDefaultersLoading ? (
-            <div className="text-xs text-charcoal-400 py-12 text-center">Loading defaulters list…</div>
+            <div className="text-xs text-charcoal-400 py-12 text-center">Loading unpaid flats list…</div>
           ) : filteredDefaulters.length === 0 ? (
             <div className="py-12 text-center space-y-2">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-leaf-500/15 text-leaf-600">
                 <CheckCircle2 size={28} />
               </div>
               <p className="text-sm font-bold text-charcoal-900 dark:text-cream-50">
-                All flat contributions are 100% cleared!
+                All flat contributions are 100% collected!
               </p>
-              <p className="text-xs text-charcoal-400">Zero outstanding dues across all residential towers.</p>
+              <p className="text-xs text-charcoal-400">Zero unpaid units across all residential towers.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+              <table className="w-full text-left border-collapse min-w-[600px]">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
                     <th className="py-3 px-3">Flat & Tower</th>
                     <th className="py-3 px-3">Resident / Owner</th>
                     <th className="py-3 px-3">Phone</th>
-                    <th className="py-3 px-3 text-right">Target (₹)</th>
-                    <th className="py-3 px-3 text-right">Paid (₹)</th>
-                    <th className="py-3 px-3 text-right">Pending Due (₹)</th>
+                    <th className="py-3 px-3 text-right">Payment Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
@@ -862,20 +885,12 @@ export const ReportsPage: React.FC = () => {
                         {d.ownerName}
                       </td>
 
-                      <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400">
-                        {d.ownerPhone || 'N/A'}
+                      <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400 font-mono">
+                        {d.ownerPhone || '—'}
                       </td>
 
-                      <td className="py-3.5 px-3 text-right text-charcoal-600 dark:text-charcoal-400 font-medium">
-                        {formatCurrency(d.expectedAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-bold text-leaf-700 dark:text-leaf-400">
-                        {formatCurrency(d.paidAmount)}
-                      </td>
-
-                      <td className="py-3.5 px-3 text-right font-extrabold text-maroon-700 dark:text-rose-400 text-sm">
-                        {formatCurrency(d.pendingAmount)}
+                      <td className="py-3.5 px-3 text-right">
+                        <Badge variant="danger">Unpaid</Badge>
                       </td>
                     </tr>
                   ))}
