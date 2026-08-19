@@ -4,7 +4,7 @@ import '../../core/constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../dashboard/collector_dashboard_view.dart';
 
-enum AuthMode { login, register, forgot, reset }
+enum AuthMode { login, forgot, reset }
 
 class LoginView extends StatefulWidget {
   const LoginView({Key? key}) : super(key: key);
@@ -20,10 +20,17 @@ class _LoginViewState extends State<LoginView> {
   // Controllers
   final _emailController = TextEditingController(text: 'collector@sgdps.com');
   final _passwordController = TextEditingController(text: 'Collector@123');
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
   final _resetTokenController = TextEditingController();
   final _newPasswordController = TextEditingController();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _resetTokenController.dispose();
+    _newPasswordController.dispose();
+    super.dispose();
+  }
 
   void _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
@@ -32,25 +39,6 @@ class _LoginViewState extends State<LoginView> {
     final success = await authProvider.login(
       _emailController.text.trim(),
       _passwordController.text.trim(),
-    );
-
-    if (success && mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const CollectorDashboardView()),
-      );
-    }
-  }
-
-  void _handleRegister() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.register(
-      firstName: _firstNameController.text.trim(),
-      lastName: _lastNameController.text.trim(),
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-      role: 'Collector',
     );
 
     if (success && mounted) {
@@ -72,6 +60,10 @@ class _LoginViewState extends State<LoginView> {
     final success = await authProvider.forgotPassword(_emailController.text.trim());
 
     if (success && mounted) {
+      final token = authProvider.generatedResetToken;
+      if (token != null && token.isNotEmpty) {
+        _resetTokenController.text = token;
+      }
       setState(() {
         _mode = AuthMode.reset;
       });
@@ -156,25 +148,7 @@ class _LoginViewState extends State<LoginView> {
                         'Durga Puja Collection & Mobile Ledger',
                         style: TextStyle(fontSize: 11, color: AppColors.inkMuted, fontWeight: FontWeight.w500),
                       ),
-                      const SizedBox(height: 18),
-
-                      // Segmented Mode Switcher
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.creamDark,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.creamBorder),
-                        ),
-                        padding: const EdgeInsets.all(3),
-                        child: Row(
-                          children: [
-                            _buildSegmentTab('Sign In', AuthMode.login),
-                            _buildSegmentTab('New Collector', AuthMode.register),
-                            _buildSegmentTab('Reset Pass', AuthMode.forgot),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 20),
 
                       // Feedback Messages
                       if (auth.errorMessage != null)
@@ -257,53 +231,7 @@ class _LoginViewState extends State<LoginView> {
                         ),
                       ],
 
-                      // MODE 2: REGISTER NEW COLLECTOR
-                      if (_mode == AuthMode.register) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildInputField(
-                                controller: _firstNameController,
-                                label: 'First Name',
-                                icon: Icons.person_outline,
-                                validator: (v) => v!.isEmpty ? 'Required' : null,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildInputField(
-                                controller: _lastNameController,
-                                label: 'Last Name',
-                                icon: Icons.person_outline,
-                                validator: (v) => v!.isEmpty ? 'Required' : null,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          controller: _emailController,
-                          label: 'Email Address',
-                          icon: Icons.email_outlined,
-                          validator: (v) => v!.isEmpty ? 'Email required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          controller: _passwordController,
-                          label: 'Create Password',
-                          icon: Icons.lock_outline,
-                          obscure: true,
-                          validator: (v) => v!.isEmpty ? 'Password required' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPrimaryButton(
-                          label: 'Register as Collector',
-                          isLoading: auth.isLoading,
-                          onPressed: _handleRegister,
-                        ),
-                      ],
-
-                      // MODE 3: FORGOT PASSWORD
+                      // MODE 2: FORGOT PASSWORD
                       if (_mode == AuthMode.forgot) ...[
                         const Text(
                           'Enter your registered email to request a reset token.',
@@ -323,16 +251,29 @@ class _LoginViewState extends State<LoginView> {
                           isLoading: auth.isLoading,
                           onPressed: _handleForgotPassword,
                         ),
-                        TextButton(
-                          onPressed: () => setState(() => _mode = AuthMode.reset),
-                          child: const Text(
-                            'Already have a token? Reset here',
-                            style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
-                          ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextButton(
+                              onPressed: () => setState(() => _mode = AuthMode.login),
+                              child: const Text(
+                                '‹ Back to Sign In',
+                                style: TextStyle(fontSize: 11, color: AppColors.inkMuted, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: () => setState(() => _mode = AuthMode.reset),
+                              child: const Text(
+                                'Have a token? Reset here',
+                                style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
 
-                      // MODE 4: RESET PASSWORD
+                      // MODE 3: RESET PASSWORD
                       if (_mode == AuthMode.reset) ...[
                         _buildInputField(
                           controller: _emailController,
@@ -361,9 +302,17 @@ class _LoginViewState extends State<LoginView> {
                           isLoading: auth.isLoading,
                           onPressed: _handleResetPassword,
                         ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => setState(() => _mode = AuthMode.login),
+                          child: const Text(
+                            '‹ Back to Sign In',
+                            style: TextStyle(fontSize: 11, color: AppColors.inkMuted, fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ],
 
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 18),
 
                       const Text(
                         'Central Database · Real-Time GPS Tracking',
@@ -373,45 +322,6 @@ class _LoginViewState extends State<LoginView> {
                   ),
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSegmentTab(String title, AuthMode mode) {
-    final isSelected = _mode == mode || (_mode == AuthMode.reset && mode == AuthMode.forgot);
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _mode = mode;
-          });
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.creamCard : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.06),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    ),
-                  ]
-                : null,
-          ),
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? AppColors.saffron : AppColors.inkMuted,
             ),
           ),
         ),
@@ -429,6 +339,7 @@ class _LoginViewState extends State<LoginView> {
     return TextFormField(
       controller: controller,
       obscureText: obscure,
+      style: const TextStyle(fontSize: 14, color: AppColors.ink),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(color: AppColors.inkMuted, fontSize: 12),

@@ -57,8 +57,12 @@ public class ForgotPassword(IMediator mediator, ILogger<ForgotPassword> _logger)
       return TypedResults.Problem(result.Errors.FirstOrDefault() ?? "Forgot password request failed.");
     }
 
+    var token = result.Value;
     return TypedResults.Ok(new ForgotPasswordResponse(
-      "If the email is registered, a password reset token has been generated."
+      token != null
+        ? "Password reset token generated successfully. You can now reset your password."
+        : "If the email is registered, a password reset token has been generated.",
+      token
     ));
     }
     catch (Exception ex)
@@ -93,4 +97,4 @@ public class ForgotPasswordRequestValidator : Validator<ForgotPasswordRequest>
   }
 }
 
-public record ForgotPasswordResponse(string Message);
+public record ForgotPasswordResponse(string Message, string? ResetToken = null);

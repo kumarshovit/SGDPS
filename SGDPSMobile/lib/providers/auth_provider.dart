@@ -103,10 +103,14 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  String? _generatedResetToken;
+  String? get generatedResetToken => _generatedResetToken;
+
   Future<bool> forgotPassword(String email) async {
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
+    _generatedResetToken = null;
     notifyListeners();
 
     try {
@@ -114,21 +118,30 @@ class AuthProvider extends ChangeNotifier {
         'email': email.trim(),
       });
 
-      final data = jsonDecode(response.body);
+      debugPrint('FORGOT PASSWORD STATUS: ${response.statusCode}');
+      debugPrint('FORGOT PASSWORD BODY: ${response.body}');
+
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _generatedResetToken = data['resetToken'] as String?;
         _successMessage = data['message'] ??
             'Password reset token generated. You can now reset password.';
         _isLoading = false;
         notifyListeners();
         return true;
       } else {
-        _errorMessage =
-            data['detail'] ?? data['title'] ?? 'Failed to process request';
+        try {
+          final data = jsonDecode(response.body);
+          _errorMessage = data['detail'] ?? data['title'] ?? 'Failed to process request';
+        } catch (_) {
+          _errorMessage = 'Server error (${response.statusCode})';
+        }
         _isLoading = false;
         notifyListeners();
         return false;
       }
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('FORGOT PASSWORD ERROR: $e\n$stack');
       _errorMessage = 'Network error: Cannot reach server';
       _isLoading = false;
       notifyListeners();

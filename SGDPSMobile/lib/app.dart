@@ -29,10 +29,13 @@ class SgdpsMobileApp extends StatelessWidget {
             secondary: AppColors.gold,
             surface: AppColors.cream,
           ),
-          textTheme: GoogleFonts.interTextTheme(
-            Theme.of(context).textTheme,
-          ),
+          fontFamily: GoogleFonts.inter().fontFamily,
           scaffoldBackgroundColor: AppColors.cream,
+          inputDecorationTheme: const InputDecorationTheme(
+            fillColor: AppColors.creamCard,
+            filled: true,
+            labelStyle: TextStyle(color: AppColors.inkMuted),
+          ),
           appBarTheme: const AppBarTheme(
             backgroundColor: AppColors.maroonDark,
             foregroundColor: AppColors.cream,

@@ -37,6 +37,71 @@ class CollectionProvider extends ChangeNotifier {
         .length;
   }
 
+  CollectionModel? get latestCollection =>
+      _collections.isNotEmpty ? _collections.first : null;
+
+  List<CollectionModel> get top10Collections =>
+      _collections.take(10).toList();
+
+  static bool matchesMode(String itemMode, String targetMode) {
+    if (targetMode == 'All') return true;
+    final a = itemMode.toLowerCase().replaceAll(' ', '').replaceAll('_', '');
+    final b = targetMode.toLowerCase().replaceAll(' ', '').replaceAll('_', '');
+    return a == b;
+  }
+
+  List<CollectionModel> getFilteredCollections({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? type,
+    String? mode,
+  }) {
+    return _collections.where((c) {
+      final dt = c.collectionDateTime.isUtc
+          ? c.collectionDateTime.toLocal()
+          : c.collectionDateTime;
+      final d = DateTime(dt.year, dt.month, dt.day);
+
+      if (startDate != null) {
+        final s = DateTime(startDate.year, startDate.month, startDate.day);
+        if (d.isBefore(s)) return false;
+      }
+      if (endDate != null) {
+        final e = DateTime(endDate.year, endDate.month, endDate.day);
+        if (d.isAfter(e)) return false;
+      }
+      if (type != null && type != 'All') {
+        if (c.type != type) return false;
+      }
+      if (mode != null && mode != 'All') {
+        if (!matchesMode(c.mode, mode)) return false;
+      }
+      return true;
+    }).toList();
+  }
+
+  double getModeTotal(String mode,
+      {DateTime? startDate, DateTime? endDate, String? type}) {
+    final list = getFilteredCollections(
+      startDate: startDate,
+      endDate: endDate,
+      type: type,
+      mode: mode == 'All' ? null : mode,
+    );
+    return list.fold(0.0, (sum, c) => sum + c.amount);
+  }
+
+  int getModeCount(String mode,
+      {DateTime? startDate, DateTime? endDate, String? type}) {
+    final list = getFilteredCollections(
+      startDate: startDate,
+      endDate: endDate,
+      type: type,
+      mode: mode == 'All' ? null : mode,
+    );
+    return list.length;
+  }
+
   double get todayTotalAmount => todayTotal;
 
   int get todayCollectionsCount => todayCount;

@@ -41,6 +41,14 @@ class _AddCollectionViewState extends State<AddCollectionView> {
     });
   }
 
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _referenceController.dispose();
+    _remarksController.dispose();
+    super.dispose();
+  }
+
   void _onFlatSelected(FlatModel flat) {
     setState(() {
       _selectedFlat = flat;
@@ -270,16 +278,25 @@ class _AddCollectionViewState extends State<AddCollectionView> {
               ),
               const SizedBox(height: 8),
               Row(
-                children: ['Cash', 'UPI', 'BankTransfer'].map((mode) {
-                  final isSelected = _paymentMode == mode;
+                children: [
+                  ('Cash', '💵', 'Cash'),
+                  ('UPI', '📱', 'UPI'),
+                  ('BankTransfer', '🏦', 'Bank'),
+                  ('Cheque', '📑', 'Cheque'),
+                ].map((item) {
+                  final modeKey = item.$1;
+                  final modeEmoji = item.$2;
+                  final modeLabel = item.$3;
+                  final isSelected = _paymentMode == modeKey;
+
                   return Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                      padding: const EdgeInsets.symmetric(horizontal: 3.0),
                       child: InkWell(
-                        onTap: () => setState(() => _paymentMode = mode),
+                        onTap: () => setState(() => _paymentMode = modeKey),
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
                             color: isSelected ? AppColors.gold.withOpacity(0.15) : AppColors.creamCard,
                             borderRadius: BorderRadius.circular(12),
@@ -291,14 +308,14 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                           child: Column(
                             children: [
                               Text(
-                                mode == 'Cash' ? '💵' : (mode == 'UPI' ? '📱' : '🏦'),
-                                style: const TextStyle(fontSize: 20),
+                                modeEmoji,
+                                style: const TextStyle(fontSize: 18),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                mode,
+                                modeLabel,
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected ? AppColors.maroonDark : AppColors.inkMuted,
                                 ),
@@ -317,11 +334,25 @@ class _AddCollectionViewState extends State<AddCollectionView> {
               // Reference No
               TextFormField(
                 controller: _referenceController,
+                cursorColor: AppColors.saffron,
+                showCursor: true,
+                enabled: true,
+                readOnly: false,
+                enableInteractiveSelection: true,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1C1310)),
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.next,
                 decoration: InputDecoration(
-                  labelText: 'Transaction / UTR Reference (Optional)',
+                  labelText: _paymentMode == 'Cheque'
+                      ? 'Cheque No. / Bank Name (Optional)'
+                      : (_paymentMode == 'Cash'
+                          ? 'Receipt / Reference (Optional)'
+                          : 'Transaction / UTR Reference (Optional)'),
                   labelStyle: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
                   filled: true,
                   fillColor: AppColors.creamCard,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: AppColors.creamBorder),
@@ -338,11 +369,22 @@ class _AddCollectionViewState extends State<AddCollectionView> {
               // Remarks
               TextFormField(
                 controller: _remarksController,
+                cursorColor: AppColors.saffron,
+                showCursor: true,
+                enabled: true,
+                readOnly: false,
+                enableInteractiveSelection: true,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1C1310)),
+                keyboardType: TextInputType.text,
+                textInputAction: TextInputAction.done,
+                maxLines: 2,
                 decoration: InputDecoration(
                   labelText: 'Remarks / Notes (Optional)',
                   labelStyle: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
                   filled: true,
                   fillColor: AppColors.creamCard,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: AppColors.creamBorder),
