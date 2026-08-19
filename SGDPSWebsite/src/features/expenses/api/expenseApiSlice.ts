@@ -29,6 +29,14 @@ export const expenseApiSlice = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Expenses', 'Dashboard', 'Reports'],
     }),
+    updateExpense: builder.mutation<Expense, { id: number; data: import('../types').UpdateExpenseInput }>({
+      query: ({ id, data }) => ({
+        url: `/expenses/${id}`,
+        method: 'PUT',
+        body: data,
+      }),
+      invalidatesTags: ['Expenses', 'Dashboard', 'Reports'],
+    }),
     deleteExpense: builder.mutation<void, number>({
       query: (id) => ({
         url: `/expenses/${id}`,
@@ -43,5 +51,6 @@ export const {
   useGetExpensesQuery,
   useGetExpenseCategorySummaryQuery,
   useCreateExpenseMutation,
+  useUpdateExpenseMutation,
   useDeleteExpenseMutation,
 } = expenseApiSlice;

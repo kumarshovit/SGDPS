@@ -28,6 +28,17 @@ export interface CreateExpenseInput {
   recordedByName?: string;
 }
 
+export interface UpdateExpenseInput {
+  expenseDate: string;
+  category: string;
+  description: string;
+  amount: number;
+  paymentMode: PaymentMode;
+  paidToVendor?: string;
+  billAttachmentUrl?: string | null;
+  remarks?: string;
+}
+
 export interface ExpenseFilterParams {
   category?: string;
   startDate?: string;

@@ -271,7 +271,7 @@ export const AddEntryPage: React.FC = () => {
               }`}
             >
               <Building2 size={18} />
-              Resident Flat Collection
+              Resident / Block
             </button>
             <button
               type="button"
@@ -283,7 +283,7 @@ export const AddEntryPage: React.FC = () => {
               }`}
             >
               <Sparkles size={18} />
-              Sponsorship / Donation / Stalls
+              Sponsorship / Other
             </button>
           </div>
 

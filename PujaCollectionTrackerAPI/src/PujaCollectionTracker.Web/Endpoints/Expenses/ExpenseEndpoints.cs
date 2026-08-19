@@ -32,6 +32,16 @@ public record CreateExpenseRequest(
   string? RecordedByUserId,
   string? RecordedByName);
 
+public record UpdateExpenseRequest(
+  DateTime ExpenseDate,
+  string Category,
+  string Description,
+  decimal Amount,
+  string PaymentMode,
+  string? PaidToVendor,
+  string? BillAttachmentUrl,
+  string? Remarks);
+
 public record ListExpensesQuery(
   string? Category,
   DateTime? StartDate,
@@ -153,6 +163,58 @@ public class CreateExpenseEndpoint(AppDbContext db) : Endpoint<CreateExpenseRequ
       DateTime.SpecifyKind(expense.CreatedAt, DateTimeKind.Utc));
 
     return TypedResults.Created($"/expenses/{expense.Id}", dto);
+  }
+}
+
+// PUT /api/expenses/{id}
+public class UpdateExpenseEndpoint(AppDbContext db) : Endpoint<UpdateExpenseRequest, Results<Ok<ExpenseDto>, NotFound, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Put("/expenses/{id:int}");
+    AllowAnonymous();
+    Tags("Expenses");
+    Summary(s => s.Summary = "Update an existing expense record");
+  }
+
+  public override async Task<Results<Ok<ExpenseDto>, NotFound, ProblemHttpResult>> ExecuteAsync(UpdateExpenseRequest req, CancellationToken ct)
+  {
+    var id = Route<int>("id");
+    var expense = await db.Expenses.FindAsync([id], ct);
+    if (expense == null) return TypedResults.NotFound();
+
+    if (req.Amount <= 0)
+      return TypedResults.Problem(detail: "Expense amount must be greater than 0", statusCode: 400);
+
+    var mode = Enum.TryParse<PaymentMode>(req.PaymentMode, true, out var parsedMode) ? parsedMode : PaymentMode.Cash;
+    var expenseDate = req.ExpenseDate == default ? expense.ExpenseDate : DateTime.SpecifyKind(req.ExpenseDate, DateTimeKind.Utc);
+
+    expense.ExpenseDate = expenseDate;
+    expense.Category = string.IsNullOrWhiteSpace(req.Category) ? "Miscellaneous" : req.Category.Trim();
+    expense.Description = req.Description.Trim();
+    expense.Amount = req.Amount;
+    expense.PaymentMode = mode;
+    expense.PaidToVendor = req.PaidToVendor?.Trim();
+    expense.BillAttachmentUrl = string.IsNullOrWhiteSpace(req.BillAttachmentUrl) ? null : req.BillAttachmentUrl.Trim();
+    expense.Remarks = req.Remarks?.Trim();
+
+    await db.SaveChangesAsync(ct);
+
+    var dto = new ExpenseDto(
+      expense.Id,
+      DateTime.SpecifyKind(expense.ExpenseDate, DateTimeKind.Utc),
+      expense.Category,
+      expense.Description,
+      expense.Amount,
+      expense.PaymentMode.ToString(),
+      expense.PaidToVendor,
+      expense.BillAttachmentUrl,
+      expense.Remarks,
+      expense.RecordedByUserId,
+      expense.RecordedByName,
+      DateTime.SpecifyKind(expense.CreatedAt, DateTimeKind.Utc));
+
+    return TypedResults.Ok(dto);
   }
 }
 

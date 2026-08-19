@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   useGetExpensesQuery,
   useCreateExpenseMutation,
+  useUpdateExpenseMutation,
   useDeleteExpenseMutation,
 } from '../api/expenseApiSlice';
 import { Expense } from '../types';
@@ -18,12 +19,14 @@ import {
   Search,
   FileSpreadsheet,
   Trash2,
+  Edit2,
   Tag,
   Download,
   UploadCloud,
   X,
   FileText,
   Receipt,
+  Calendar,
 } from 'lucide-react';
 import { exportExpensesToExcel } from '../../../utils/exportHelpers';
 import { PaymentMode } from '../../collections/types';
@@ -49,6 +52,19 @@ export const ExpensesPage: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
 
+  // Edit Expense State
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [editCategory, setEditCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
+  const [editAmount, setEditAmount] = useState<string>('');
+  const [editDescription, setEditDescription] = useState<string>('');
+  const [editPaymentMode, setEditPaymentMode] = useState<PaymentMode>('Cash');
+  const [editPaidToVendor, setEditPaidToVendor] = useState<string>('');
+  const [editRemarks, setEditRemarks] = useState<string>('');
+  const [editExpenseDate, setEditExpenseDate] = useState<string>('');
+  const [editBillAttachmentUrl, setEditBillAttachmentUrl] = useState<string>('');
+  const [editFileName, setEditFileName] = useState<string>('');
+
   // Form State
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState<string>('');
@@ -61,6 +77,7 @@ export const ExpensesPage: React.FC = () => {
 
   const { data: expenses = [], isLoading } = useGetExpensesQuery();
   const [createExpense, { isLoading: isCreating }] = useCreateExpenseMutation();
+  const [updateExpense, { isLoading: isUpdating }] = useUpdateExpenseMutation();
   const [deleteExpense] = useDeleteExpenseMutation();
 
   const filteredExpenses = expenses.filter((e) => {
@@ -110,6 +127,68 @@ export const ExpensesPage: React.FC = () => {
     setFileName('');
   };
 
+  const handleOpenEditModal = (exp: Expense) => {
+    setEditingExpense(exp);
+    setEditCategory(exp.category || EXPENSE_CATEGORIES[0]);
+    setEditAmount(String(exp.amount));
+    setEditDescription(exp.description || '');
+    setEditPaymentMode(exp.paymentMode || 'Cash');
+    setEditPaidToVendor(exp.paidToVendor || '');
+    setEditRemarks(exp.remarks || '');
+    setEditExpenseDate(exp.expenseDate ? exp.expenseDate.split('T')[0] : new Date().toISOString().split('T')[0]);
+    setEditBillAttachmentUrl(exp.billAttachmentUrl || '');
+    setEditFileName(exp.billAttachmentUrl ? 'Attached_Bill.png' : '');
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size exceeds 5MB limit. Please upload a smaller image.');
+      return;
+    }
+
+    setEditFileName(file.name);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditBillAttachmentUrl(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveEditFile = () => {
+    setEditBillAttachmentUrl('');
+    setEditFileName('');
+  };
+
+  const handleUpdateExpense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense || !editAmount || parseFloat(editAmount) <= 0) return;
+
+    try {
+      await updateExpense({
+        id: editingExpense.id,
+        data: {
+          expenseDate: editExpenseDate ? new Date(editExpenseDate).toISOString() : editingExpense.expenseDate,
+          category: editCategory,
+          amount: parseFloat(editAmount),
+          description: editDescription.trim(),
+          paymentMode: editPaymentMode,
+          paidToVendor: editPaidToVendor.trim() || undefined,
+          billAttachmentUrl: editBillAttachmentUrl.trim() ? editBillAttachmentUrl.trim() : null,
+          remarks: editRemarks.trim() || undefined,
+        },
+      }).unwrap();
+
+      setIsEditModalOpen(false);
+      setEditingExpense(null);
+    } catch (err: any) {
+      alert(err?.data?.detail || 'Failed to update expense');
+    }
+  };
+
   const handleCreateExpense = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || parseFloat(amount) <= 0) return;
@@ -144,12 +223,26 @@ export const ExpensesPage: React.FC = () => {
     setExpenseToDelete(null);
   };
 
-  // Direct download receipt helper
+  // Helper to detect attachment extension from Data URL or link
+  const getAttachmentExtension = (dataUrl: string): string => {
+    if (dataUrl.startsWith('data:application/pdf')) return 'pdf';
+    if (dataUrl.startsWith('data:image/jpeg') || dataUrl.startsWith('data:image/jpg')) return 'jpg';
+    if (dataUrl.startsWith('data:image/png')) return 'png';
+    if (dataUrl.startsWith('data:image/webp')) return 'webp';
+    if (dataUrl.startsWith('data:image/svg')) return 'svg';
+    if (dataUrl.toLowerCase().includes('.pdf')) return 'pdf';
+    if (dataUrl.toLowerCase().includes('.jpg') || dataUrl.toLowerCase().includes('.jpeg')) return 'jpg';
+    if (dataUrl.toLowerCase().includes('.webp')) return 'webp';
+    return 'png';
+  };
+
+  // Direct download receipt helper with accurate file extension
   const handleDownloadReceipt = (exp: Expense) => {
     if (!exp.billAttachmentUrl) return;
+    const ext = getAttachmentExtension(exp.billAttachmentUrl);
     const link = document.createElement('a');
     link.href = exp.billAttachmentUrl;
-    link.download = `Bill_Receipt_${exp.id}_${exp.category.replace(/[^a-zA-Z0-9]/g, '_')}.png`;
+    link.download = `Bill_Receipt_${exp.id}_${exp.category.replace(/[^a-zA-Z0-9]/g, '_')}.${ext}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -320,6 +413,13 @@ export const ExpensesPage: React.FC = () => {
                     <td className="py-3.5 px-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
+                          onClick={() => handleOpenEditModal(exp)}
+                          className="p-1 rounded-lg text-charcoal-400 hover:text-gold-600 dark:hover:text-gold-400 transition-colors"
+                          title="Edit expense"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button
                           onClick={() => setExpenseToDelete(exp)}
                           className="p-1 rounded-lg text-charcoal-400 hover:text-maroon-700 dark:hover:text-rose-400 transition-colors"
                           title="Delete expense"
@@ -426,17 +526,23 @@ export const ExpensesPage: React.FC = () => {
               ) : (
                 <div className="flex items-center justify-between p-3 rounded-2xl border border-gold-500/40 bg-gold-500/10">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={billAttachmentUrl}
-                      alt="Receipt preview"
-                      className="h-12 w-12 rounded-xl object-cover border border-gold-500/30"
-                    />
+                    {billAttachmentUrl.startsWith('data:application/pdf') || (fileName && fileName.toLowerCase().endsWith('.pdf')) ? (
+                      <div className="h-12 w-12 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                        <FileText size={22} />
+                      </div>
+                    ) : (
+                      <img
+                        src={billAttachmentUrl}
+                        alt="Receipt preview"
+                        className="h-12 w-12 rounded-xl object-cover border border-gold-500/30"
+                      />
+                    )}
                     <div>
                       <p className="text-xs font-bold text-charcoal-900 dark:text-cream-50 truncate max-w-[200px]">
                         {fileName || 'Receipt_Attachment.png'}
                       </p>
                       <p className="text-[11px] text-leaf-600 dark:text-leaf-400 font-semibold">
-                        ✓ Image attached & ready to save
+                        ✓ Attachment attached & ready to save
                       </p>
                     </div>
                   </div>
@@ -459,6 +565,175 @@ export const ExpensesPage: React.FC = () => {
               </Button>
               <Button type="submit" variant="primary" isLoading={isCreating}>
                 Save Expense
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Edit Expense Modal */}
+      {isEditModalOpen && editingExpense && (
+        <Modal
+          isOpen={isEditModalOpen}
+          onClose={() => {
+            setIsEditModalOpen(false);
+            setEditingExpense(null);
+          }}
+          title="Edit Expense Record"
+          subtitle={`Update details for expense #${editingExpense.id} (${editingExpense.category})`}
+        >
+          <form onSubmit={handleUpdateExpense} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Expense Category *"
+                value={editCategory}
+                onChange={(e) => setEditCategory(e.target.value)}
+                options={EXPENSE_CATEGORIES.map((c) => ({ label: c, value: c }))}
+              />
+
+              <Input
+                label="Amount (₹) *"
+                type="number"
+                min="1"
+                required
+                value={editAmount}
+                onChange={(e) => setEditAmount(e.target.value)}
+                placeholder="5000"
+              />
+            </div>
+
+            <Input
+              label="Description / Purpose *"
+              required
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              placeholder="e.g. Stage Decoration & Flowers Day 1"
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Payment Mode *"
+                value={editPaymentMode}
+                onChange={(e) => setEditPaymentMode(e.target.value as PaymentMode)}
+                options={[
+                  { label: '💵 Cash', value: 'Cash' },
+                  { label: '📱 UPI', value: 'UPI' },
+                  { label: '🏦 Bank Transfer', value: 'BankTransfer' },
+                  { label: '📑 Cheque', value: 'Cheque' },
+                ]}
+              />
+
+              <Input
+                label="Paid to Vendor / Recipient"
+                value={editPaidToVendor}
+                onChange={(e) => setEditPaidToVendor(e.target.value)}
+                placeholder="e.g. Ramesh Electricals"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Expense Date"
+                type="date"
+                value={editExpenseDate}
+                onChange={(e) => setEditExpenseDate(e.target.value)}
+                icon={<Calendar size={15} />}
+              />
+
+              <Input
+                label="Bill No / Remarks"
+                value={editRemarks}
+                onChange={(e) => setEditRemarks(e.target.value)}
+                placeholder="Bill or invoice reference"
+              />
+            </div>
+
+            {/* Bill / Receipt Attachment Management */}
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-charcoal-700 dark:text-cream-200 uppercase tracking-wider">
+                Bill / Receipt Attachment
+              </label>
+
+              {!editBillAttachmentUrl ? (
+                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-cream-border dark:border-charcoal-600 hover:border-gold-500 rounded-2xl cursor-pointer bg-cream-50/50 dark:bg-charcoal-900/60 hover:bg-gold-50/20 transition-all">
+                  <UploadCloud size={24} className="text-gold-600 dark:text-gold-400 mb-1" />
+                  <span className="text-xs font-bold text-charcoal-800 dark:text-cream-100">
+                    Click to attach Bill or Receipt image
+                  </span>
+                  <span className="text-[11px] text-charcoal-400 mt-0.5">
+                    Supports JPG, PNG, WEBP (Max 5MB)
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={handleEditFileChange}
+                    className="hidden"
+                  />
+                </label>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-2xl border border-gold-500/40 bg-gold-500/10">
+                  <div className="flex items-center gap-3">
+                    {editBillAttachmentUrl.startsWith('data:application/pdf') || (editFileName && editFileName.toLowerCase().endsWith('.pdf')) ? (
+                      <div className="h-12 w-12 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-700 dark:text-rose-400 border border-rose-500/30">
+                        <FileText size={22} />
+                      </div>
+                    ) : editBillAttachmentUrl.startsWith('data:image') || editBillAttachmentUrl.startsWith('http') ? (
+                      <img
+                        src={editBillAttachmentUrl}
+                        alt="Receipt preview"
+                        className="h-12 w-12 rounded-xl object-cover border border-gold-500/30"
+                      />
+                    ) : (
+                      <div className="h-12 w-12 rounded-xl bg-gold-500/20 flex items-center justify-center text-gold-700 dark:text-gold-300">
+                        <FileText size={20} />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs font-bold text-charcoal-900 dark:text-cream-50 truncate max-w-[200px]">
+                        {editFileName || 'Attached_Receipt.png'}
+                      </p>
+                      <p className="text-[11px] text-leaf-600 dark:text-leaf-400 font-semibold">
+                        ✓ Attachment attached
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] font-bold text-saffron-600 dark:text-gold-400 hover:underline cursor-pointer">
+                      Replace
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={handleEditFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleRemoveEditFile}
+                      className="p-1.5 rounded-xl hover:bg-maroon-500/10 text-rose-600 dark:text-rose-400 transition-colors"
+                      title="Remove attachment"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-cream-100 dark:border-charcoal-700">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setIsEditModalOpen(false);
+                  setEditingExpense(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" isLoading={isUpdating}>
+                Save Changes
               </Button>
             </div>
           </form>
