@@ -246,7 +246,7 @@ public record BlockItemDto(
 
 public record CreateBlockRequest(
   string BlockName,
-  int Floors = 9,
+  int Floors = 18,
   int FlatsPerFloor = 7,
   decimal ExpectedAmount = 2500m);
 
@@ -279,8 +279,8 @@ public class ListBlocksEndpoint(AppDbContext db) : EndpointWithoutRequest<Result
 
       result.Add(new BlockItemDto(
         g.Key,
-        floors > 0 ? floors : 9,
-        maxFlatsPerFloor > 0 ? maxFlatsPerFloor : 7,
+        floors >= 18 ? floors : 18,
+        maxFlatsPerFloor >= 7 ? maxFlatsPerFloor : 7,
         totalUnits,
         activeUnits,
         expectedAmt,
@@ -299,7 +299,7 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
     Post("/blocks");
     AllowAnonymous();
     Tags("Blocks");
-    Summary(s => s.Summary = "Create or activate a block with custom floors and flats per floor (default: 9 floors, 7 flats/floor)");
+    Summary(s => s.Summary = "Create or activate a block with custom floors and flats per floor (default: 18 floors, 7 flats/floor)");
   }
 
   public override async Task<Results<Ok<BlockItemDto>, ProblemHttpResult>> ExecuteAsync(CreateBlockRequest req, CancellationToken ct)
@@ -315,7 +315,7 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
       blockName = $"{char.ToUpperInvariant(rawName[0])}-Block";
     }
 
-    int floorCount = req.Floors > 0 ? req.Floors : 9;
+    int floorCount = req.Floors > 0 ? req.Floors : 18;
     int unitsPerFloor = req.FlatsPerFloor > 0 ? req.FlatsPerFloor : 7;
     decimal expectedAmt = req.ExpectedAmount > 0 ? req.ExpectedAmount : 2500m;
 

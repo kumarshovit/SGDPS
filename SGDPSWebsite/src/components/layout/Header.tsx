@@ -70,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const [categories, setCategories] = useState<string[]>(getSponsorshipCategories());
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [newBlockInput, setNewBlockInput] = useState('');
-  const [newBlockFloors, setNewBlockFloors] = useState<number>(9);
+  const [newBlockFloors, setNewBlockFloors] = useState<number>(18);
   const [newBlockFlatsPerFloor, setNewBlockFlatsPerFloor] = useState<number>(7);
   const [pendingNewBlocks, setPendingNewBlocks] = useState<QueuedBlock[]>([]);
   const [blockWarning, setBlockWarning] = useState<string>('');
@@ -93,14 +93,16 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         setActiveBlocksList(getActiveBlocks(activeFromFlats));
       }
       setDeletePin(getDeletePin());
-      setFloorsPerBlock(getGlobalFloorsPerBlock());
-      setFlatsPerFloor(getGlobalFlatsPerFloor());
+      const currentFloors = getGlobalFloorsPerBlock();
+      const currentFlats = getGlobalFlatsPerFloor();
+      setFloorsPerBlock(currentFloors);
+      setFlatsPerFloor(currentFlats);
       setCategories(getSponsorshipCategories());
       setPendingNewBlocks([]);
       setNewCategoryInput('');
       setNewBlockInput('');
-      setNewBlockFloors(floorsPerBlock || 9);
-      setNewBlockFlatsPerFloor(flatsPerFloor || 7);
+      setNewBlockFloors(currentFloors || 18);
+      setNewBlockFlatsPerFloor(currentFlats || 7);
       setBlockWarning('');
       setSaveSuccessMsg('');
     }
@@ -129,8 +131,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       return;
     }
 
-    const floors = newBlockFloors > 0 ? newBlockFloors : 9;
-    const units = newBlockFlatsPerFloor > 0 ? newBlockFlatsPerFloor : 7;
+    const floors = newBlockFloors > 0 ? newBlockFloors : (floorsPerBlock || 18);
+    const units = newBlockFlatsPerFloor > 0 ? newBlockFlatsPerFloor : (flatsPerFloor || 7);
 
     setPendingNewBlocks((prev) => [...prev, { name: formatted, floors, flatsPerFloor: units }]);
     setNewBlockInput('');
@@ -417,12 +419,18 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   </div>
                   <div>
                     <Input
-                      label="Floors (Default: 9)"
+                      label="Floors (Default: 18)"
                       type="number"
                       min={1}
                       max={50}
-                      value={newBlockFloors}
-                      onChange={(e) => setNewBlockFloors(parseInt(e.target.value) || 9)}
+                      value={newBlockFloors === 0 ? '' : newBlockFloors}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewBlockFloors(val === '' ? 0 : parseInt(val) || 0);
+                      }}
+                      onBlur={() => {
+                        if (!newBlockFloors || newBlockFloors <= 0) setNewBlockFloors(18);
+                      }}
                       className="text-xs"
                     />
                   </div>
@@ -432,8 +440,14 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                       type="number"
                       min={1}
                       max={20}
-                      value={newBlockFlatsPerFloor}
-                      onChange={(e) => setNewBlockFlatsPerFloor(parseInt(e.target.value) || 7)}
+                      value={newBlockFlatsPerFloor === 0 ? '' : newBlockFlatsPerFloor}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewBlockFlatsPerFloor(val === '' ? 0 : parseInt(val) || 0);
+                      }}
+                      onBlur={() => {
+                        if (!newBlockFlatsPerFloor || newBlockFlatsPerFloor <= 0) setNewBlockFlatsPerFloor(7);
+                      }}
                       className="text-xs"
                     />
                   </div>
@@ -441,7 +455,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-[11px] text-charcoal-500 dark:text-charcoal-400">
-                    ℹ️ Will provision <strong>{newBlockFloors * newBlockFlatsPerFloor} flat units</strong> ({newBlockFloors} floors × {newBlockFlatsPerFloor} flats/floor)
+                    ℹ️ Will provision <strong>{(newBlockFloors || 18) * (newBlockFlatsPerFloor || 7)} flat units</strong> ({newBlockFloors || 18} floors × {newBlockFlatsPerFloor || 7} flats/floor)
                   </span>
                   <Button
                     type="button"
@@ -476,8 +490,14 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   min={1}
                   max={50}
                   required
-                  value={floorsPerBlock}
-                  onChange={(e) => setFloorsPerBlock(parseInt(e.target.value) || 9)}
+                  value={floorsPerBlock === 0 ? '' : floorsPerBlock}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFloorsPerBlock(val === '' ? 0 : parseInt(val) || 0);
+                  }}
+                  onBlur={() => {
+                    if (!floorsPerBlock || floorsPerBlock <= 0) setFloorsPerBlock(18);
+                  }}
                 />
                 <Input
                   label="Flats per floor"
@@ -485,12 +505,18 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                   min={1}
                   max={20}
                   required
-                  value={flatsPerFloor}
-                  onChange={(e) => setFlatsPerFloor(parseInt(e.target.value) || 7)}
+                  value={flatsPerFloor === 0 ? '' : flatsPerFloor}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFlatsPerFloor(val === '' ? 0 : parseInt(val) || 0);
+                  }}
+                  onBlur={() => {
+                    if (!flatsPerFloor || flatsPerFloor <= 0) setFlatsPerFloor(7);
+                  }}
                 />
               </div>
               <p className="text-[11px] text-charcoal-500 dark:text-charcoal-400">
-                New blocks will be initialized with {floorsPerBlock} floors × {flatsPerFloor} flats per floor ({floorsPerBlock * flatsPerFloor} total units).
+                New blocks will be initialized with {floorsPerBlock || 18} floors × {flatsPerFloor || 7} flats per floor ({(floorsPerBlock || 18) * (flatsPerFloor || 7)} total units).
               </p>
             </div>
 

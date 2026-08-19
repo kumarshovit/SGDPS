@@ -5,7 +5,7 @@ import {
   useCreateCollectionMutation,
   useDeleteCollectionMutation,
 } from '../../collections/api/collectionApiSlice';
-import { useGetFlatsQuery } from '../api/flatApiSlice';
+import { useGetFlatsQuery, useGetBlocksQuery } from '../api/flatApiSlice';
 import { useGetCollectorsQuery } from '../../users/api/userApiSlice';
 import { formatCurrency, formatOrdinal } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -17,14 +17,17 @@ import { Select } from '../../../components/ui/Select';
 import { Badge } from '../../../components/ui/Badge';
 import { Building2, Layers, Trash2, IndianRupee, Flame, Plus } from 'lucide-react';
 import { PaymentMode, Collection } from '../../collections/types';
-import { getActiveBlocks } from '../../../utils/settingsHelper';
+import { getActiveBlocks, getGlobalFloorsPerBlock, getGlobalFlatsPerFloor } from '../../../utils/settingsHelper';
 
 export const BlockGridPage: React.FC = () => {
   const navigate = useNavigate();
   const { data: collections = [], isLoading: isCollectionsLoading } = useGetCollectionsQuery();
   const { data: flatsData = [], isLoading: isFlatsLoading } = useGetFlatsQuery();
+  const { data: dbBlocks = [] } = useGetBlocksQuery();
   const { data: collectors = [] } = useGetCollectorsQuery();
   const [activeBlock, setActiveBlock] = useState('A-Block');
+  const [globalFloors, setGlobalFloors] = useState<number>(() => getGlobalFloorsPerBlock());
+  const [globalFlats, setGlobalFlats] = useState<number>(() => getGlobalFlatsPerFloor());
   const [selectedCell, setSelectedCell] = useState<{
     block: string;
     floor: number;
@@ -61,12 +64,14 @@ export const BlockGridPage: React.FC = () => {
     return getActiveBlocks(fromFlats);
   });
 
-  // Keep active blocks in sync with database and settings
+  // Keep active blocks and dimensions in sync with database and settings
   useEffect(() => {
     const fromFlats = Array.from(new Set(flatsData.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     setActiveBlocks(getActiveBlocks(fromFlats));
 
     const handleSettingsUpdated = () => {
+      setGlobalFloors(getGlobalFloorsPerBlock());
+      setGlobalFlats(getGlobalFlatsPerFloor());
       const activeFlats = Array.from(new Set(flatsData.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
       setActiveBlocks(getActiveBlocks(activeFlats));
     };
@@ -110,22 +115,17 @@ export const BlockGridPage: React.FC = () => {
 
   const blockData = gridData[activeBlock] || {};
 
-  // Compute floors with minimum 9 floors for every block, plus any higher floors
+  // Compute floors strictly based on configured settings (e.g. 17 floors)
   const floors = useMemo(() => {
-    const blockFloors = blockFlats.map((f) => f.floor).filter((f) => f > 0);
-    const maxFloor = Math.max(9, ...blockFloors);
-    return Array.from({ length: maxFloor }, (_, i) => i + 1).reverse();
-  }, [blockFlats]);
+    const configuredFloors = globalFloors && globalFloors > 0 ? globalFloors : 18;
+    return Array.from({ length: configuredFloors }, (_, i) => i + 1).reverse();
+  }, [globalFloors]);
 
-  // Compute flat unit numbers (min 4 flats per floor, or max unit present)
+  // Compute flat unit numbers strictly based on configured settings (e.g. 7 or 9 flats)
   const flats = useMemo(() => {
-    const units = blockFlats.map((f) => {
-      const last = parseInt(f.flatNumber.slice(-1));
-      return isNaN(last) ? 1 : last;
-    });
-    const maxUnit = Math.max(4, ...units);
-    return Array.from({ length: maxUnit }, (_, i) => i + 1);
-  }, [blockFlats]);
+    const configuredFlats = globalFlats && globalFlats > 0 ? globalFlats : 7;
+    return Array.from({ length: configuredFlats }, (_, i) => i + 1);
+  }, [globalFlats]);
 
   // Block Totals & Counts
   const { blockTotal, paidCount, totalUnits, pct } = useMemo(() => {

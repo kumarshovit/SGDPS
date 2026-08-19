@@ -96,17 +96,21 @@ export const saveDeletePin = (pin: string): void => {
 };
 
 export const getGlobalFloorsPerBlock = (): number => {
-  const val = parseInt(localStorage.getItem('sgdps_floors_per_block') || '9');
-  return isNaN(val) || val <= 0 ? 9 : val;
+  const saved = localStorage.getItem('sgdps_floors_per_block');
+  if (!saved) return 18;
+  const val = parseInt(saved);
+  return isNaN(val) || val <= 0 ? 18 : val;
 };
 
 export const saveGlobalFloorsPerBlock = (floors: number): void => {
-  localStorage.setItem('sgdps_floors_per_block', String(floors > 0 ? floors : 9));
+  localStorage.setItem('sgdps_floors_per_block', String(floors > 0 ? floors : 18));
   window.dispatchEvent(new Event('sgdps_settings_updated'));
 };
 
 export const getGlobalFlatsPerFloor = (): number => {
-  const val = parseInt(localStorage.getItem('sgdps_flats_per_floor') || '7');
+  const saved = localStorage.getItem('sgdps_flats_per_floor');
+  if (!saved) return 7;
+  const val = parseInt(saved);
   return isNaN(val) || val <= 0 ? 7 : val;
 };
 
