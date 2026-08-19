@@ -72,14 +72,14 @@ export const AddEntryPage: React.FC = () => {
 
   // Listen for settings updates to sync categories, blocks, and dimensions dynamically
   useEffect(() => {
-    const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+    const fromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     setActiveBlocks(getActiveBlocks(fromFlats));
     setFloorsPerBlock(getGlobalFloorsPerBlock());
     setFlatsPerFloor(getGlobalFlatsPerFloor());
 
     const handleSettingsUpdate = () => {
-      const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
-      setActiveBlocks(getActiveBlocks(fromFlats));
+      const activeFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
+      setActiveBlocks(getActiveBlocks(activeFlats));
       setFloorsPerBlock(getGlobalFloorsPerBlock());
       setFlatsPerFloor(getGlobalFlatsPerFloor());
       const updated = getSponsorshipCategories();
@@ -327,8 +327,10 @@ export const AddEntryPage: React.FC = () => {
                 {matchedFlat && (
                   <div className="flex items-center justify-between p-3 rounded-xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
                     <div>
-                      <span className="text-charcoal-500 dark:text-charcoal-400">Registered Owner: </span>
-                      <strong className="text-charcoal-900 dark:text-cream-50">{matchedFlat.ownerName}</strong>
+                      <span className="text-charcoal-500 dark:text-charcoal-400">Selected Unit: </span>
+                      <strong className="text-charcoal-900 dark:text-cream-50">
+                        {matchedFlat.block} · Fl {matchedFlat.floor} · Flat {matchedFlat.flatNumber}
+                      </strong>
                     </div>
                     <Badge
                       variant={
@@ -343,8 +345,8 @@ export const AddEntryPage: React.FC = () => {
                 )}
 
                 <Input
-                  label="Resident / Payer Name (Optional if matching registered owner)"
-                  placeholder={matchedFlat?.ownerName || 'e.g. S. K. Mukherjee'}
+                  label="Resident / Payer Name (Optional)"
+                  placeholder="e.g. S. K. Mukherjee"
                   value={residentName}
                   onChange={(e) => setResidentName(e.target.value)}
                   icon={<User size={16} />}

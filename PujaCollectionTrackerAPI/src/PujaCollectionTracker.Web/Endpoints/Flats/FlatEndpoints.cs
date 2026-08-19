@@ -118,7 +118,7 @@ public class GetBlockGridSummaryEndpoint(AppDbContext db) : EndpointWithoutReque
 
   public override async Task<Results<Ok<List<BlockGridSummaryResponse>>, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
   {
-    var flats = await db.Flats.AsNoTracking().ToListAsync(ct);
+    var flats = await db.Flats.AsNoTracking().Where(f => f.IsActive).ToListAsync(ct);
     var collections = await db.PaymentCollections
       .AsNoTracking()
       .Where(c => c.Type == CollectionType.ResidentBlock && c.FlatId.HasValue)
@@ -134,7 +134,7 @@ public class GetBlockGridSummaryEndpoint(AppDbContext db) : EndpointWithoutReque
       var blockFlats = flats.Where(f => f.Block == block).ToList();
       var floorGroups = new Dictionary<int, List<FlatGridCell>>();
 
-      var floors = blockFlats.Select(f => f.Floor).Distinct().OrderByDescending(fl => fl);
+      var floors = blockFlats.Select(f => f.Floor).Distinct();
       decimal blockCollected = 0;
       decimal blockExpected = 0;
       int paidCount = 0;
@@ -188,17 +188,25 @@ public class CreateFlatEndpoint(AppDbContext db) : Endpoint<CreateFlatRequest, R
     Post("/flats");
     AllowAnonymous();
     Tags("Flats");
+    Summary(s => s.Summary = "Add a new flat unit");
   }
 
   public override async Task<Results<Created<FlatDto>, ProblemHttpResult>> ExecuteAsync(CreateFlatRequest req, CancellationToken ct)
   {
+    var block = req.Block.Trim();
+    var flatNumber = req.FlatNumber.Trim();
+
+    var exists = await db.Flats.AnyAsync(f => f.Block == block && f.FlatNumber == flatNumber, ct);
+    if (exists)
+      return TypedResults.Problem(detail: $"Flat {flatNumber} in {block} already exists.", statusCode: 400);
+
     var flat = new Flat
     {
-      Block = req.Block.Trim(),
+      Block = block,
       Floor = req.Floor,
-      FlatNumber = req.FlatNumber.Trim(),
+      FlatNumber = flatNumber,
       OwnerName = req.OwnerName.Trim(),
-      OwnerPhone = req.OwnerPhone.Trim(),
+      OwnerPhone = req.OwnerPhone?.Trim() ?? "",
       Email = req.Email?.Trim(),
       ExpectedAmount = req.ExpectedAmount,
       IsActive = true,
@@ -234,7 +242,7 @@ public record CreateBlockRequest(
   decimal ExpectedAmount = 0);
 
 // POST /api/flats/create-block
-public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest, Results<Ok<List<FlatDto>>, ProblemHttpResult>>
+public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest, Results<Ok<List<FlatDto>>, ProblemHttpResult>>
 {
   public override void Configure()
   {
@@ -250,9 +258,15 @@ public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBloc
     if (string.IsNullOrWhiteSpace(blockName))
       return TypedResults.Problem(detail: "Block name is required", statusCode: 400);
 
-    var existingFlats = await db.Flats.AsNoTracking().Where(f => f.Block == blockName).ToListAsync(ct);
+    var existingFlats = await db.Flats.Where(f => f.Block.ToLower() == blockName.ToLower()).ToListAsync(ct);
     if (existingFlats.Count != 0)
     {
+      foreach (var f in existingFlats)
+      {
+        f.IsActive = true;
+      }
+      await db.SaveChangesAsync(ct);
+
       var existingDtos = existingFlats
         .Select(f => new FlatDto(
           f.Id,
@@ -314,6 +328,40 @@ public class CreateBlockWithFlatsEndpoint(AppDbContext db) : Endpoint<CreateBloc
       f.CreatedAt)).ToList();
 
     return TypedResults.Ok(dtos);
+  }
+}
+
+public record ToggleBlockStatusRequest(bool IsActive);
+
+// PUT /api/flats/blocks/{blockName}/status
+public class ToggleBlockStatusEndpoint(AppDbContext db) : Endpoint<ToggleBlockStatusRequest, Results<Ok<string>, NotFound, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Put("/flats/blocks/{blockName}/status");
+    AllowAnonymous();
+    Tags("Flats");
+    Summary(s => s.Summary = "Activate or deactivate all flats in a block");
+  }
+
+  public override async Task<Results<Ok<string>, NotFound, ProblemHttpResult>> ExecuteAsync(ToggleBlockStatusRequest req, CancellationToken ct)
+  {
+    var blockName = Route<string>("blockName");
+    if (string.IsNullOrWhiteSpace(blockName))
+      return TypedResults.Problem(detail: "Block name is required", statusCode: 400);
+
+    var cleanName = blockName.Trim().ToLowerInvariant();
+    var flats = await db.Flats.Where(f => f.Block.ToLower() == cleanName).ToListAsync(ct);
+    if (flats.Count == 0)
+      return TypedResults.NotFound();
+
+    foreach (var flat in flats)
+    {
+      flat.IsActive = req.IsActive;
+    }
+
+    await db.SaveChangesAsync(ct);
+    return TypedResults.Ok($"Updated {flats.Count} flats in block '{blockName}' to IsActive={req.IsActive}");
   }
 }
 

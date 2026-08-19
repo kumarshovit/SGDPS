@@ -42,6 +42,14 @@ export const flatApiSlice = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Flats', 'BlockGrid', 'Dashboard', 'Reports'],
     }),
+    toggleBlockStatus: builder.mutation<{ message: string }, { blockName: string; isActive: boolean }>({
+      query: ({ blockName, isActive }) => ({
+        url: `/flats/blocks/${encodeURIComponent(blockName)}/status`,
+        method: 'PUT',
+        body: { isActive },
+      }),
+      invalidatesTags: ['Flats', 'BlockGrid', 'Dashboard', 'Reports'],
+    }),
   }),
 });
 
@@ -50,6 +58,7 @@ export const {
   useGetBlockGridSummaryQuery,
   useCreateFlatMutation,
   useCreateBlockMutation,
+  useToggleBlockStatusMutation,
   useUpdateFlatMutation,
   useDeleteFlatMutation,
 } = flatApiSlice;
