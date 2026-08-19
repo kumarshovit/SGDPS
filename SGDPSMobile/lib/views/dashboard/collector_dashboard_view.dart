@@ -36,12 +36,14 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
 
   Future<void> _loadData() async {
     await Future.wait([
-      Provider.of<CollectionProvider>(context, listen: false).fetchCollections(),
+      Provider.of<CollectionProvider>(context, listen: false)
+          .fetchCollections(),
       Provider.of<FlatProvider>(context, listen: false).fetchFlats(),
     ]);
   }
 
-  (DateTime?, DateTime?) _resolveDateRange(DatePreset preset, DateTimeRange? customRange) {
+  (DateTime?, DateTime?) _resolveDateRange(
+      DatePreset preset, DateTimeRange? customRange) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
@@ -60,8 +62,10 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
       case DatePreset.custom:
         if (customRange != null) {
           return (
-            DateTime(customRange.start.year, customRange.start.month, customRange.start.day),
-            DateTime(customRange.end.year, customRange.end.month, customRange.end.day),
+            DateTime(customRange.start.year, customRange.start.month,
+                customRange.start.day),
+            DateTime(customRange.end.year, customRange.end.month,
+                customRange.end.day),
           );
         }
         return (today, today);
@@ -141,160 +145,7 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
     }
   }
 
-  void _showFilterOptionsModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.creamCard,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        DatePreset tempPreset = _datePreset;
-        String tempType = _typeFilter;
 
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Filter Dashboard Data',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.maroonDark,
-                          fontFamily: 'serif',
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 1),
-                  const SizedBox(height: 14),
-
-                  const Text(
-                    'DATE PERIOD',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.inkMuted,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: DatePreset.values.map((p) {
-                      final isSelected = tempPreset == p;
-                      return ChoiceChip(
-                        label: Text(_getPresetLabel(p, _customDateRange)),
-                        selected: isSelected,
-                        selectedColor: AppColors.saffron,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : AppColors.ink,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                        backgroundColor: AppColors.cream,
-                        side: BorderSide(
-                          color: isSelected ? AppColors.saffron : AppColors.creamBorder,
-                        ),
-                        onSelected: (selected) {
-                          if (selected) {
-                            if (p == DatePreset.custom) {
-                              Navigator.pop(context);
-                              _pickCustomDateRange();
-                            } else {
-                              setModalState(() => tempPreset = p);
-                            }
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 16),
-                  const Text(
-                    'COLLECTION TYPE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.inkMuted,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ('All', 'All Types'),
-                      ('ResidentBlock', 'Resident / Flats'),
-                      ('SponsorshipOther', 'Sponsorship / Other'),
-                    ].map((entry) {
-                      final isSelected = tempType == entry.$1;
-                      return ChoiceChip(
-                        label: Text(entry.$2),
-                        selected: isSelected,
-                        selectedColor: AppColors.maroonDark,
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : AppColors.ink,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                        backgroundColor: AppColors.cream,
-                        side: BorderSide(
-                          color: isSelected ? AppColors.maroonDark : AppColors.creamBorder,
-                        ),
-                        onSelected: (selected) {
-                          if (selected) {
-                            setModalState(() => tempType = entry.$1);
-                          }
-                        },
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _datePreset = tempPreset;
-                          _typeFilter = tempType;
-                        });
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.saffron,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: const Text(
-                        'Apply Filter to Dashboard',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
   // Drill-down Modal Sheet when user clicks any of the 5 cards
   void _showModeCollectionsModal({
@@ -338,37 +189,51 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.goldSoft,
-                              borderRadius: BorderRadius.circular(10),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.goldSoft,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(icon,
+                                  style: const TextStyle(fontSize: 20)),
                             ),
-                            child: Text(icon, style: const TextStyle(fontSize: 20)),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$title Collections',
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.maroonDark,
-                                  fontFamily: 'serif',
-                                ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title.endsWith('Collections') ||
+                                            title.contains('&')
+                                        ? title
+                                        : '$title Collections',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.maroonDark,
+                                      fontFamily: 'serif',
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '$periodLabel · ${items.length} ${items.length == 1 ? "entry" : "entries"}',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: AppColors.inkMuted),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '$periodLabel · ${items.length} ${items.length == 1 ? "entry" : "entries"}',
-                                style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
-                              ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         '₹${totalAmount.toStringAsFixed(0)}',
                         style: const TextStyle(
@@ -389,12 +254,15 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.inkLight),
+                                  const Icon(Icons.receipt_long_outlined,
+                                      size: 48, color: AppColors.inkLight),
                                   const SizedBox(height: 10),
                                   Text(
                                     'No $title collections recorded for $periodLabel',
                                     textAlign: TextAlign.center,
-                                    style: const TextStyle(color: AppColors.inkMuted, fontSize: 13),
+                                    style: const TextStyle(
+                                        color: AppColors.inkMuted,
+                                        fontSize: 13),
                                   ),
                                 ],
                               ),
@@ -403,7 +271,8 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                         : ListView.separated(
                             controller: scrollController,
                             itemCount: items.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final item = items[index];
                               return _buildTransactionCard(item);
@@ -453,26 +322,34 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Recent Collections',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.maroonDark,
-                              fontFamily: 'serif',
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Recent Collections',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.maroonDark,
+                                fontFamily: 'serif',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Text(
-                            'Showing ${top10.length} latest entries',
-                            style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
-                          ),
-                        ],
+                            Text(
+                              'Showing ${top10.length} latest entries',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.inkMuted),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
                       IconButton(
-                        icon: const Icon(Icons.close, size: 20, color: AppColors.inkMuted),
+                        icon: const Icon(Icons.close,
+                            size: 20, color: AppColors.inkMuted),
                         onPressed: () => Navigator.pop(ctx),
                       ),
                     ],
@@ -481,12 +358,14 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   Expanded(
                     child: top10.isEmpty
                         ? const Center(
-                            child: Text('No collections recorded yet', style: TextStyle(color: AppColors.inkMuted)),
+                            child: Text('No collections recorded yet',
+                                style: TextStyle(color: AppColors.inkMuted)),
                           )
                         : ListView.separated(
                             controller: scrollController,
                             itemCount: top10.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 8),
                             itemBuilder: (context, index) {
                               final item = top10[index];
                               return _buildTransactionCard(item);
@@ -508,12 +387,16 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.creamCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Confirm Logout', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.maroonDark)),
-        content: const Text('Are you sure you want to sign out of SGDPS Collector?'),
+        title: const Text('Confirm Logout',
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: AppColors.maroonDark)),
+        content:
+            const Text('Are you sure you want to sign out of SGDPS Collector?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkMuted)),
+            child: const Text('Cancel',
+                style: TextStyle(color: AppColors.inkMuted)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -544,36 +427,55 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
     final collectionProvider = Provider.of<CollectionProvider>(context);
     final flatProvider = Provider.of<FlatProvider>(context);
 
-    final bool hasError = collectionProvider.errorMessage != null || flatProvider.errorMessage != null;
-    final String? errorText = collectionProvider.errorMessage ?? flatProvider.errorMessage;
+    final bool hasError = collectionProvider.errorMessage != null ||
+        flatProvider.errorMessage != null;
+    final String? errorText =
+        collectionProvider.errorMessage ?? flatProvider.errorMessage;
 
     // Resolve Unified Filtered Collections based on selected date preset & type filter
-    final (filterStart, filterEnd) = _resolveDateRange(_datePreset, _customDateRange);
+    final (filterStart, filterEnd) =
+        _resolveDateRange(_datePreset, _customDateRange);
     final filteredList = collectionProvider.getFilteredCollections(
       startDate: filterStart,
       endDate: filterEnd,
       type: _typeFilter,
     );
 
-    final double heroAmount = filteredList.fold(0.0, (sum, c) => sum + c.amount);
+    final double heroAmount =
+        filteredList.fold(0.0, (sum, c) => sum + c.amount);
     final int heroCount = filteredList.length;
 
     // Mode-specific collections from the filtered set
-    final cashItems = filteredList.where((c) => CollectionProvider.matchesMode(c.mode, 'Cash')).toList();
+    final cashItems = filteredList
+        .where((c) => CollectionProvider.matchesMode(c.mode, 'Cash'))
+        .toList();
     final double cashAmount = cashItems.fold(0.0, (sum, c) => sum + c.amount);
     final int cashCount = cashItems.length;
 
-    final upiItems = filteredList.where((c) => CollectionProvider.matchesMode(c.mode, 'UPI')).toList();
+    final upiItems = filteredList
+        .where((c) => CollectionProvider.matchesMode(c.mode, 'UPI'))
+        .toList();
     final double upiAmount = upiItems.fold(0.0, (sum, c) => sum + c.amount);
     final int upiCount = upiItems.length;
 
-    final bankItems = filteredList.where((c) => CollectionProvider.matchesMode(c.mode, 'BankTransfer')).toList();
+    final bankItems = filteredList
+        .where((c) => CollectionProvider.matchesMode(c.mode, 'BankTransfer'))
+        .toList();
     final double bankAmount = bankItems.fold(0.0, (sum, c) => sum + c.amount);
     final int bankCount = bankItems.length;
 
-    final chequeItems = filteredList.where((c) => CollectionProvider.matchesMode(c.mode, 'Cheque')).toList();
-    final double chequeAmount = chequeItems.fold(0.0, (sum, c) => sum + c.amount);
+    final chequeItems = filteredList
+        .where((c) => CollectionProvider.matchesMode(c.mode, 'Cheque'))
+        .toList();
+    final double chequeAmount =
+        chequeItems.fold(0.0, (sum, c) => sum + c.amount);
     final int chequeCount = chequeItems.length;
+
+    final sponsorshipItems =
+        filteredList.where((c) => c.type == 'SponsorshipOther').toList();
+    final double sponsorshipAmount =
+        sponsorshipItems.fold(0.0, (sum, c) => sum + c.amount);
+    final int sponsorshipCount = sponsorshipItems.length;
 
     final allItems = filteredList;
     final double allAmount = heroAmount;
@@ -596,7 +498,10 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           children: [
             const Text(
               'SGDPS Collector',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'serif'),
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'serif'),
             ),
             Text(
               'Namaste, ${auth.user?.fullName ?? "Collector"}',
@@ -639,7 +544,8 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
               if (hasError)
                 Container(
                   margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: Colors.red.shade50,
                     borderRadius: BorderRadius.circular(12),
@@ -647,22 +553,31 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                      const Icon(Icons.error_outline,
+                          color: Colors.red, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           errorText ?? 'Failed to load data',
-                          style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500),
                         ),
                       ),
                       TextButton(
                         onPressed: _loadData,
                         style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text('Retry', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+                        child: const Text('Retry',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12)),
                       ),
                     ],
                   ),
@@ -701,7 +616,9 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                         ),
                         backgroundColor: AppColors.creamCard,
                         side: BorderSide(
-                          color: isSelected ? AppColors.maroonDark : AppColors.creamBorder,
+                          color: isSelected
+                              ? AppColors.maroonDark
+                              : AppColors.creamBorder,
                         ),
                         onSelected: (selected) {
                           if (selected) {
@@ -715,20 +632,29 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                       Padding(
                         padding: const EdgeInsets.only(right: 6.0),
                         child: ActionChip(
-                          avatar: const Icon(Icons.calendar_month, size: 14, color: AppColors.saffron),
+                          avatar: const Icon(Icons.calendar_month,
+                              size: 14, color: AppColors.saffron),
                           label: Text(
-                            _datePreset == DatePreset.custom && _customDateRange != null
-                                ? _getPresetLabel(DatePreset.custom, _customDateRange)
+                            _datePreset == DatePreset.custom &&
+                                    _customDateRange != null
+                                ? _getPresetLabel(
+                                    DatePreset.custom, _customDateRange)
                                 : 'Custom 📅',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
-                              color: _datePreset == DatePreset.custom ? AppColors.maroonDark : AppColors.ink,
+                              color: _datePreset == DatePreset.custom
+                                  ? AppColors.maroonDark
+                                  : AppColors.ink,
                             ),
                           ),
-                          backgroundColor: _datePreset == DatePreset.custom ? AppColors.goldSoft : AppColors.creamCard,
+                          backgroundColor: _datePreset == DatePreset.custom
+                              ? AppColors.goldSoft
+                              : AppColors.creamCard,
                           side: BorderSide(
-                            color: _datePreset == DatePreset.custom ? AppColors.gold : AppColors.creamBorder,
+                            color: _datePreset == DatePreset.custom
+                                ? AppColors.gold
+                                : AppColors.creamBorder,
                           ),
                           onPressed: _pickCustomDateRange,
                         ),
@@ -745,12 +671,17 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [AppColors.maroonDark, AppColors.maroon, Color(0xFF631520)],
+                    colors: [
+                      AppColors.maroonDark,
+                      AppColors.maroon,
+                      Color(0xFF631520)
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.gold.withOpacity(0.4), width: 1.5),
+                  border: Border.all(
+                      color: AppColors.gold.withOpacity(0.4), width: 1.5),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.maroon.withOpacity(0.35),
@@ -762,7 +693,7 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top Row: Title + Filter Action Pill
+                    // Top Row: Title + Entries Badge
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -777,31 +708,30 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                             ),
                           ),
                         ),
-                        InkWell(
-                          onTap: _showFilterOptionsModal,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.gold.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.goldLight.withOpacity(0.6)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.tune, color: AppColors.goldLight, size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  _typeFilter == 'All' ? 'Filters' : (_typeFilter == 'ResidentBlock' ? 'Flats' : 'Sponsors'),
-                                  style: const TextStyle(
-                                    color: AppColors.goldLight,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.gold.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppColors.gold.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.verified_outlined,
+                                  color: AppColors.goldLight, size: 12),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$heroCount ${heroCount == 1 ? "entry" : "entries"}',
+                                style: const TextStyle(
+                                  color: AppColors.goldLight,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -828,10 +758,19 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                       children: [
                         _buildStatItem('Entries Logged', '$heroCount'),
                         if (_typeFilter != 'All')
-                          _buildStatItem('Type', _typeFilter == 'ResidentBlock' ? 'Flats' : 'Sponsor')
+                          _buildStatItem(
+                              'Type',
+                              _typeFilter == 'ResidentBlock'
+                                  ? 'Flats'
+                                  : 'Sponsor')
                         else
-                          _buildStatItem('Avg / Entry', heroCount > 0 ? '₹${(heroAmount / heroCount).toStringAsFixed(0)}' : '₹0'),
-                        _buildStatItem('All-Time Total', '₹${collectionProvider.totalAmount.toStringAsFixed(0)}'),
+                          _buildStatItem(
+                              'Avg / Entry',
+                              heroCount > 0
+                                  ? '₹${(heroAmount / heroCount).toStringAsFixed(0)}'
+                                  : '₹0'),
+                        _buildStatItem('All-Time Total',
+                            '₹${collectionProvider.totalAmount.toStringAsFixed(0)}'),
                       ],
                     ),
                   ],
@@ -849,28 +788,39 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                     children: [
                       Text(
                         'Collection Action',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.ink, fontFamily: 'serif'),
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.ink,
+                            fontFamily: 'serif'),
                       ),
                       Text(
                         'Issue instant digital receipt',
-                        style: TextStyle(fontSize: 11, color: AppColors.inkMuted),
+                        style:
+                            TextStyle(fontSize: 11, color: AppColors.inkMuted),
                       ),
                     ],
                   ),
                   ElevatedButton.icon(
                     onPressed: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AddCollectionView()),
+                        MaterialPageRoute(
+                            builder: (_) => const AddCollectionView()),
                       );
                     },
-                    icon: const Icon(Icons.add_circle, color: Colors.white, size: 18),
+                    icon: const Icon(Icons.add_circle,
+                        color: Colors.white, size: 18),
                     label: const Text(
                       'Record Collection',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.saffron,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -985,13 +935,28 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
               ),
               const SizedBox(height: 10),
 
-              // Row 3: All Transactions (Full Width Maroon Featured Card)
+              // Row 3: Sponsorships & Donations Featured Card
+              _buildMaroonSponsorshipCard(
+                amount: sponsorshipAmount,
+                count: sponsorshipCount,
+                period: _getPresetLabel(_datePreset, _customDateRange),
+                onTap: () => _showModeCollectionsModal(
+                  title: 'Sponsorships & Donations',
+                  icon: '🌟',
+                  items: sponsorshipItems,
+                  totalAmount: sponsorshipAmount,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              // Row 4: All Transactions (Full Width Maroon Featured Card)
               _buildMaroonAllTransactionsCard(
                 amount: allAmount,
                 count: allCount,
                 period: _getPresetLabel(_datePreset, _customDateRange),
                 onTap: () => _showModeCollectionsModal(
-                  title: 'All Transactions',
+                  // title: 'All Transactions',
+                  title: 'All',
                   icon: '📊',
                   items: allItems,
                   totalAmount: allAmount,
@@ -1030,7 +995,8 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                             ),
                           ),
                           SizedBox(width: 4),
-                          Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.saffron),
+                          Icon(Icons.arrow_forward_ios,
+                              size: 12, color: AppColors.saffron),
                         ],
                       ),
                     ),
@@ -1057,9 +1023,13 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   ),
                   child: const Column(
                     children: [
-                      Icon(Icons.receipt_long_outlined, size: 36, color: AppColors.inkLight),
+                      Icon(Icons.receipt_long_outlined,
+                          size: 36, color: AppColors.inkLight),
                       SizedBox(height: 6),
-                      Text('No collections logged yet', style: TextStyle(color: AppColors.inkMuted, fontWeight: FontWeight.w500)),
+                      Text('No collections logged yet',
+                          style: TextStyle(
+                              color: AppColors.inkMuted,
+                              fontWeight: FontWeight.w500)),
                     ],
                   ),
                 )
@@ -1092,12 +1062,17 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [AppColors.maroonDark, AppColors.maroon, Color(0xFF631520)],
+              colors: [
+                AppColors.maroonDark,
+                AppColors.maroon,
+                Color(0xFF631520)
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.gold.withOpacity(0.4), width: 1.3),
+            border:
+                Border.all(color: AppColors.gold.withOpacity(0.4), width: 1.3),
             boxShadow: [
               BoxShadow(
                 color: AppColors.maroon.withOpacity(0.25),
@@ -1139,17 +1114,132 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: AppColors.gold.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       '$count ${count == 1 ? "entry" : "entries"}',
-                      style: const TextStyle(fontSize: 10, color: AppColors.goldLight, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.goldLight,
+                          fontWeight: FontWeight.bold),
                     ),
                   ),
-                  const Icon(Icons.arrow_forward_ios, size: 10, color: AppColors.goldLight),
+                  const Icon(Icons.arrow_forward_ios,
+                      size: 10, color: AppColors.goldLight),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Full-width Maroon Sponsorships & Donations Card
+  Widget _buildMaroonSponsorshipCard({
+    required double amount,
+    required int count,
+    required String period,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        splashColor: AppColors.gold.withOpacity(0.2),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF52131D),
+                Color(0xFF6B1826),
+                Color(0xFF7E1E2E),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border:
+                Border.all(color: AppColors.gold.withOpacity(0.55), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.maroon.withOpacity(0.25),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: AppColors.gold.withOpacity(0.5)),
+                      ),
+                      child: const Center(
+                        child: Text('🌟', style: TextStyle(fontSize: 18)),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Sponsorships & Donations',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontFamily: 'serif',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '$period ($count ${count == 1 ? "entry" : "entries"})',
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.goldLight),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '₹${amount.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.goldLight,
+                      fontFamily: 'serif',
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_ios,
+                      size: 11, color: AppColors.goldLight),
                 ],
               ),
             ],
@@ -1177,12 +1267,17 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [AppColors.maroonDark, AppColors.maroon, Color(0xFF631520)],
+              colors: [
+                AppColors.maroonDark,
+                AppColors.maroon,
+                Color(0xFF631520)
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.gold.withOpacity(0.5), width: 1.5),
+            border:
+                Border.all(color: AppColors.gold.withOpacity(0.5), width: 1.5),
             boxShadow: [
               BoxShadow(
                 color: AppColors.maroon.withOpacity(0.3),
@@ -1194,54 +1289,67 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: AppColors.gold.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.gold.withOpacity(0.4)),
-                    ),
-                    child: const Center(
-                      child: Text('📊', style: TextStyle(fontSize: 20)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'All Transactions',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          fontFamily: 'serif',
-                        ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border:
+                            Border.all(color: AppColors.gold.withOpacity(0.4)),
                       ),
-                      Text(
-                        '$period ($count entries)',
-                        style: const TextStyle(fontSize: 11, color: AppColors.goldLight),
+                      child: const Center(
+                        child: Text('📊', style: TextStyle(fontSize: 18)),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'All Transactions',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontFamily: 'serif',
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            '$period ($count ${count == 1 ? "entry" : "entries"})',
+                            style: const TextStyle(
+                                fontSize: 11, color: AppColors.goldLight),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     '₹${amount.toStringAsFixed(0)}',
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 18,
                       fontWeight: FontWeight.bold,
                       color: AppColors.goldLight,
                       fontFamily: 'serif',
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.arrow_forward_ios, size: 12, color: AppColors.goldLight),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward_ios,
+                      size: 11, color: AppColors.goldLight),
                 ],
               ),
             ],
@@ -1268,13 +1376,21 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: AppColors.goldSoft,
+            color: item.type == 'SponsorshipOther'
+                ? AppColors.gold.withOpacity(0.25)
+                : AppColors.goldSoft,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+            border: Border.all(
+              color: item.type == 'SponsorshipOther'
+                  ? AppColors.gold
+                  : AppColors.gold.withOpacity(0.3),
+            ),
           ),
           child: Center(
             child: Text(
-              item.type == 'ResidentBlock' ? (item.block?.substring(0, 1) ?? 'A') : 'S',
+              item.type == 'ResidentBlock'
+                  ? (item.block?.substring(0, 1) ?? 'A')
+                  : '🌟',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: AppColors.maroonDark,
@@ -1284,15 +1400,18 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           ),
         ),
         title: Text(
-          item.type == 'ResidentBlock' ? '${item.block} · Flat ${item.flatNumber}' : (item.category ?? 'Donation'),
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink),
+          item.type == 'ResidentBlock'
+              ? '${item.block} · Flat ${item.flatNumber}'
+              : (item.category ?? 'Sponsorship / Donation'),
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 2),
             Text(
-              '${item.donorResidentName ?? "Resident"} · ${item.mode}',
+              '${item.donorResidentName ?? (item.type == "ResidentBlock" ? "Resident" : "Donor")} · ${item.mode}${item.collectedByName != null ? " · By " + item.collectedByName! : ""}',
               style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
             ),
             const SizedBox(height: 2),
@@ -1317,14 +1436,18 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
             InkWell(
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ReceiptView(collection: item)),
+                  MaterialPageRoute(
+                      builder: (_) => ReceiptView(collection: item)),
                 );
               },
               child: const Padding(
                 padding: EdgeInsets.symmetric(vertical: 2.0),
                 child: Text(
                   'Receipt >',
-                  style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.saffron,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -1345,7 +1468,8 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
         const SizedBox(height: 2),
         Text(
           value,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+          style: const TextStyle(
+              fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
         ),
       ],
     );
