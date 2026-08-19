@@ -82,8 +82,8 @@ public static class SeedData
             Block = block,
             Floor = floor,
             FlatNumber = flatNumber,
-            OwnerName = $"Owner {block.Substring(0, 1)}-{flatNumber}",
-            OwnerPhone = $"98765{floor:D2}{flatNum:D3}",
+            OwnerName = $"Resident {block}-{flatNumber}",
+            OwnerPhone = "",
             ExpectedAmount = 0m,
             IsActive = true,
             CreatedAt = DateTime.UtcNow

@@ -40,6 +40,7 @@ export interface CreateCollectionInput {
   collectedByName?: string;
   remarks?: string;
   collectionDateTime?: string;
+  ownerPhone?: string;
 }
 
 export interface CollectionFilterParams {

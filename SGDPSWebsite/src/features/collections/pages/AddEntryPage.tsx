@@ -42,6 +42,7 @@ export const AddEntryPage: React.FC = () => {
   const [category, setCategory] = useState<string>(() => getSponsorshipCategories()[0] || 'Sponsorship - Pratima');
   const [customCategory, setCustomCategory] = useState('');
   const [residentName, setResidentName] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('');
   const [amount, setAmount] = useState('2500');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('UPI');
   const [collectedByName, setCollectedByName] = useState(
@@ -174,6 +175,7 @@ export const AddEntryPage: React.FC = () => {
         collectedByName: collectedByName,
         remarks: remarks.trim() || undefined,
         collectionDateTime: collectionIso,
+        ownerPhone: ownerPhone.trim() || undefined,
       }).unwrap();
 
       setSuccessReceipt({
@@ -194,6 +196,7 @@ export const AddEntryPage: React.FC = () => {
     setSuccessReceipt(null);
     setAmount('2500');
     setResidentName('');
+    setOwnerPhone('');
     setReferenceNo('');
     setRemarks('');
     const d = new Date();
@@ -326,9 +329,6 @@ export const AddEntryPage: React.FC = () => {
                     <div>
                       <span className="text-charcoal-500 dark:text-charcoal-400">Registered Owner: </span>
                       <strong className="text-charcoal-900 dark:text-cream-50">{matchedFlat.ownerName}</strong>
-                      {matchedFlat.ownerPhone && (
-                        <span className="text-charcoal-400 ml-2">({matchedFlat.ownerPhone})</span>
-                      )}
                     </div>
                     <Badge
                       variant={
@@ -348,6 +348,14 @@ export const AddEntryPage: React.FC = () => {
                   value={residentName}
                   onChange={(e) => setResidentName(e.target.value)}
                   icon={<User size={16} />}
+                />
+
+                <Input
+                  label="Phone / WhatsApp Number (updates Flat Master if changed)"
+                  placeholder="+91 9876543210"
+                  value={ownerPhone}
+                  onChange={(e) => setOwnerPhone(e.target.value)}
+                  icon={<Smartphone size={16} />}
                 />
               </div>
             ) : (

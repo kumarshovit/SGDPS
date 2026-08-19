@@ -37,26 +37,34 @@ export const CollectionsPage: React.FC = () => {
     }
     if (filterMode !== 'all' && e.mode !== filterMode) return false;
     if (query.trim()) {
-      const qTokens = query.toLowerCase().trim().split(/\s+/);
+      const q = query.toLowerCase().trim();
+      const isResident = e.type === 'ResidentBlock';
+      
       const searchFields = [
         e.receiptNumber,
         e.donorResidentName,
-        e.flatNumber,
-        e.block,
-        e.floor ? `floor ${e.floor}` : '',
-        e.floor ? `fl ${e.floor}` : '',
-        e.category,
+        isResident ? e.block : '',
+        isResident ? `block ${e.block}` : '',
+        isResident ? e.flatNumber : '',
+        isResident ? `flat ${e.flatNumber}` : '',
+        isResident && e.floor ? `floor ${e.floor}` : '',
+        isResident && e.floor ? `fl ${e.floor}` : '',
+        isResident ? `${e.block} ${e.flatNumber}` : '',
+        isResident ? `${e.block} flat ${e.flatNumber}` : '',
+        isResident ? `${e.block} - ${e.flatNumber}` : '',
+        isResident ? `${e.block} · fl ${e.floor} · flat ${e.flatNumber}` : '',
+        isResident ? `${e.block} - fl ${e.floor} - flat ${e.flatNumber}` : '',
+        !isResident ? e.category : '',
         e.collectedByName,
         e.remarks,
         e.transactionReference,
         e.mode,
         String(e.amount),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
+      ].filter(Boolean);
 
-      const matches = qTokens.every((token) => searchFields.includes(token));
+      const matches = searchFields.some((field) =>
+        (field as string).toLowerCase().includes(q)
+      );
       if (!matches) return false;
     }
     return true;

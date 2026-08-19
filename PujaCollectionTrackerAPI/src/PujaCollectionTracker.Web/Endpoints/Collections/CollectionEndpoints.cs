@@ -43,7 +43,8 @@ public record CreateCollectionRequest(
   string? CollectedByUserId,
   string? CollectedByName,
   string? Remarks,
-  DateTime? CollectionDateTime);
+  DateTime? CollectionDateTime,
+  string? OwnerPhone);
 
 public record UpdateCollectionRequest(
   decimal Amount,
@@ -234,6 +235,12 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
         flatNumber = flat.FlatNumber;
         if (string.IsNullOrWhiteSpace(donorName))
           donorName = flat.OwnerName;
+
+        // Auto-update flat owner's phone if provided during collection
+        if (!string.IsNullOrWhiteSpace(req.OwnerPhone))
+        {
+          flat.OwnerPhone = req.OwnerPhone.Trim();
+        }
       }
     }
 
@@ -269,11 +276,11 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
     var collection = new PaymentCollection
     {
       Type = type,
-      FlatId = req.FlatId,
-      Block = block,
-      Floor = floor,
-      FlatNumber = flatNumber,
-      Category = req.Category,
+      FlatId = type == CollectionType.ResidentBlock ? req.FlatId : null,
+      Block = type == CollectionType.ResidentBlock ? block : null,
+      Floor = type == CollectionType.ResidentBlock ? floor : null,
+      FlatNumber = type == CollectionType.ResidentBlock ? flatNumber : null,
+      Category = type == CollectionType.SponsorshipOther ? req.Category : null,
       DonorResidentName = donorName,
       Amount = req.Amount,
       Mode = mode,
