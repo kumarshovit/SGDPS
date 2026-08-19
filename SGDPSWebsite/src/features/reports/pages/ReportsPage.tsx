@@ -154,20 +154,36 @@ export const ReportsPage: React.FC = () => {
     });
   }, [expenses, datePreset, fromDate, toDate, selectedCategory, selectedPaymentMode, searchQuery]);
 
-  // Filtered Defaulters
+  // Filtered Flats for Paid & Unpaid Status Report
   const filteredDefaulters = useMemo(() => {
-    return defaulters.filter((d) => {
+    return flats.filter((d) => {
       if (selectedBlock !== 'ALL' && d.block !== selectedBlock) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const name = (d.ownerName || '').toLowerCase();
         const blk = (d.block || '').toLowerCase();
         const flatNo = String(d.flatNumber || '').toLowerCase();
-        if (!name.includes(q) && !blk.includes(q) && !flatNo.includes(q)) return false;
+        const phone = (d.ownerPhone || '').toLowerCase();
+        const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
+        const status = isPaid ? 'paid' : 'unpaid';
+        if (!name.includes(q) && !blk.includes(q) && !flatNo.includes(q) && !phone.includes(q) && !status.includes(q)) return false;
       }
       return true;
     });
-  }, [defaulters, selectedBlock, searchQuery]);
+  }, [flats, selectedBlock, searchQuery]);
+
+  const flatsPaidCount = useMemo(
+    () => filteredDefaulters.filter((f) => f.paymentStatus === 'Paid' || (f.totalCollected || 0) > 0).length,
+    [filteredDefaulters]
+  );
+  const flatsUnpaidCount = useMemo(
+    () => filteredDefaulters.length - flatsPaidCount,
+    [filteredDefaulters, flatsPaidCount]
+  );
+  const flatsTotalCollected = useMemo(
+    () => filteredDefaulters.reduce((s, f) => s + (f.totalCollected || 0), 0),
+    [filteredDefaulters]
+  );
 
   // Financial Metrics (Calculated dynamically on Filtered Period)
   const periodCollectionTotal = useMemo(
@@ -311,18 +327,30 @@ export const ReportsPage: React.FC = () => {
           footRows
         );
       } else if (reportType === 'defaulters') {
-        const rows = filteredDefaulters.map((d) => [
-          `${d.block} · Fl ${d.floor} · Flat ${d.flatNumber}`,
-          d.ownerName,
-          d.ownerPhone || '—',
-          'Unpaid',
-        ]);
+        const rows = filteredDefaulters.map((d) => {
+          const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
+          return [
+            `${d.block} · Fl ${d.floor} · Flat ${d.flatNumber}`,
+            d.ownerName,
+            d.ownerPhone || '—',
+            formatPdfCurrency(d.totalCollected || 0),
+            isPaid ? 'Paid' : 'Unpaid',
+          ];
+        });
+        const footRows = [
+          [
+            { content: 'Total Units Summary', colSpan: 3, styles: { halign: 'left', fontStyle: 'bold' } },
+            { content: `+${formatPdfCurrency(flatsTotalCollected)}`, styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: `Paid: ${flatsPaidCount} | Unpaid: ${flatsUnpaidCount}`, styles: { halign: 'center', fontStyle: 'bold' } },
+          ],
+        ];
         exportToPdf(
-          `Unpaid Flats Statement (${dateLabel})`,
-          ['Flat & Tower', 'Resident', 'Phone', 'Status'],
+          `Flats Collection Status (Paid & Unpaid) Statement (${dateLabel})`,
+          ['Flat & Tower', 'Resident / Owner', 'Phone', 'Collected (Rs.)', 'Status'],
           rows,
-          `SGDPS_Unpaid_Flats`,
-          `Total Unpaid Units: ${filteredDefaulters.length} Flats`
+          `SGDPS_Flats_Paid_Unpaid_Statement`,
+          `Total: ${filteredDefaulters.length} Units | Paid: ${flatsPaidCount} | Unpaid: ${flatsUnpaidCount} | Collected: ${formatPdfCurrency(flatsTotalCollected)}`,
+          footRows
         );
       }
     } else {
@@ -457,7 +485,7 @@ export const ReportsPage: React.FC = () => {
                 { label: '🏷️ 2. Category-wise Expenses Breakdown', value: 'category_expenses' },
                 { label: '📅 3. Date / Month-wise Expenses Ledger', value: 'date_wise_expenses' },
                 { label: '📥 4. Payment & Collection Entries Register', value: 'collections_register' },
-                { label: '⚠️ 5. Unpaid / Pending Units Statement', value: 'defaulters' },
+                { label: '🏢 5. All Flats Paid & Unpaid Status Report', value: 'defaulters' },
               ]}
             />
           </div>
@@ -842,58 +870,80 @@ export const ReportsPage: React.FC = () => {
         </GlassCard>
       )}
 
-      {/* REPORT 5: Unpaid / Pending Flats Statement */}
+      {/* REPORT 5: All Flats Paid & Unpaid Status Statement */}
       {reportType === 'defaulters' && (
         <GlassCard
-          title={`Unpaid Flats Statement (${filteredDefaulters.length} Units)`}
-          subtitle={`Flats with zero recorded collection payments`}
+          title={`All Flats Paid & Unpaid Status Statement (${filteredDefaulters.length} Units)`}
+          subtitle={`Comprehensive directory of all residential units with live collection amount and payment status`}
         >
-          {isDefaultersLoading ? (
-            <div className="text-xs text-charcoal-400 py-12 text-center">Loading unpaid flats list…</div>
-          ) : filteredDefaulters.length === 0 ? (
-            <div className="py-12 text-center space-y-2">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-leaf-500/15 text-leaf-600">
-                <CheckCircle2 size={28} />
-              </div>
-              <p className="text-sm font-bold text-charcoal-900 dark:text-cream-50">
-                All flat contributions are 100% collected!
-              </p>
-              <p className="text-xs text-charcoal-400">Zero unpaid units across all residential towers.</p>
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5 p-3 rounded-2xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
+            <div>
+              <span className="text-charcoal-400 font-medium">Total Units:</span>
+              <div className="text-base font-extrabold text-charcoal-900 dark:text-cream-50">{filteredDefaulters.length}</div>
+            </div>
+            <div>
+              <span className="text-leaf-600 dark:text-leaf-400 font-medium">Paid Units:</span>
+              <div className="text-base font-extrabold text-leaf-600 dark:text-leaf-400">{flatsPaidCount}</div>
+            </div>
+            <div>
+              <span className="text-rose-600 dark:text-rose-400 font-medium">Unpaid Units:</span>
+              <div className="text-base font-extrabold text-rose-600 dark:text-rose-400">{flatsUnpaidCount}</div>
+            </div>
+            <div>
+              <span className="text-gold-600 dark:text-gold-400 font-medium">Total Collected:</span>
+              <div className="text-base font-extrabold text-saffron-700 dark:text-gold-400">{formatCurrency(flatsTotalCollected)}</div>
+            </div>
+          </div>
+
+          {filteredDefaulters.length === 0 ? (
+            <div className="py-12 text-center text-xs text-charcoal-400">
+              No flats match your filter criteria.
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[600px]">
+              <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
                     <th className="py-3 px-3">Flat & Tower</th>
                     <th className="py-3 px-3">Resident / Owner</th>
                     <th className="py-3 px-3">Phone</th>
-                    <th className="py-3 px-3 text-right">Payment Status</th>
+                    <th className="py-3 px-3 text-right">Collected (₹)</th>
+                    <th className="py-3 px-3 text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {filteredDefaulters.map((d) => (
-                    <tr
-                      key={d.flatId}
-                      className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
-                    >
-                      <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
-                        {d.block} · Fl {d.floor} · Flat {d.flatNumber}
-                      </td>
+                  {filteredDefaulters.map((d) => {
+                    const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
+                    return (
+                      <tr
+                        key={d.id}
+                        className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                      >
+                        <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                          {d.block} · Fl {d.floor} · Flat {d.flatNumber}
+                        </td>
 
-                      <td className="py-3.5 px-3 font-bold text-charcoal-800 dark:text-cream-200">
-                        {d.ownerName}
-                      </td>
+                        <td className="py-3.5 px-3 font-medium text-charcoal-800 dark:text-cream-200">
+                          {d.ownerName}
+                        </td>
 
-                      <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400 font-mono">
-                        {d.ownerPhone || '—'}
-                      </td>
+                        <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400 font-mono">
+                          {d.ownerPhone || '—'}
+                        </td>
 
-                      <td className="py-3.5 px-3 text-right">
-                        <Badge variant="danger">Unpaid</Badge>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-3.5 px-3 text-right font-bold font-mono text-leaf-700 dark:text-leaf-400">
+                          {formatCurrency(d.totalCollected || 0)}
+                        </td>
+
+                        <td className="py-3.5 px-3 text-center">
+                          <Badge variant={isPaid ? 'success' : 'danger'} size="sm">
+                            {isPaid ? 'Paid' : 'Unpaid'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

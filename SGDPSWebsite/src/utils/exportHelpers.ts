@@ -129,16 +129,17 @@ export const exportCategoryExpensesToExcel = (categories: { category: string; co
   exportToExcel(data, 'SGDPS_Category_Expenses_Summary');
 };
 
-export const exportDefaultersToExcel = (defaulters: any[]) => {
-  const data = defaulters.map((d) => ({
+export const exportDefaultersToExcel = (flats: any[]) => {
+  const data = flats.map((d) => ({
     Block: d.block,
     Floor: d.floor,
     'Flat No': d.flatNumber,
-    Resident: d.ownerName,
+    'Resident / Owner': d.ownerName,
     Phone: d.ownerPhone || '',
-    Status: 'Unpaid',
+    'Collected (Rs)': d.totalCollected || 0,
+    Status: d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0 ? 'Paid' : 'Unpaid',
   }));
-  exportToExcel(data, 'SGDPS_Unpaid_Flats');
+  exportToExcel(data, 'SGDPS_Flats_Paid_Unpaid_Report');
 };
 
 export const exportDateWiseReportToExcel = (dailyReports: any[]) => {
