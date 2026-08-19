@@ -189,39 +189,51 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppColors.goldSoft,
-                              borderRadius: BorderRadius.circular(10),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.goldSoft,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(icon,
+                                  style: const TextStyle(fontSize: 20)),
                             ),
-                            child: Text(icon,
-                                style: const TextStyle(fontSize: 20)),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '$title Collections',
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.maroonDark,
-                                  fontFamily: 'serif',
-                                ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    title.endsWith('Collections') ||
+                                            title.contains('&')
+                                        ? title
+                                        : '$title Collections',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.maroonDark,
+                                      fontFamily: 'serif',
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    '$periodLabel · ${items.length} ${items.length == 1 ? "entry" : "entries"}',
+                                    style: const TextStyle(
+                                        fontSize: 12, color: AppColors.inkMuted),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              Text(
-                                '$periodLabel · ${items.length} ${items.length == 1 ? "entry" : "entries"}',
-                                style: const TextStyle(
-                                    fontSize: 12, color: AppColors.inkMuted),
-                              ),
-                            ],
-                          ),
-                        ],
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Text(
                         '₹${totalAmount.toStringAsFixed(0)}',
                         style: const TextStyle(
@@ -310,24 +322,30 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Recent Collections',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.maroonDark,
-                              fontFamily: 'serif',
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Recent Collections',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.maroonDark,
+                                fontFamily: 'serif',
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Text(
-                            'Showing ${top10.length} latest entries',
-                            style: const TextStyle(
-                                fontSize: 12, color: AppColors.inkMuted),
-                          ),
-                        ],
+                            Text(
+                              'Showing ${top10.length} latest entries',
+                              style: const TextStyle(
+                                  fontSize: 12, color: AppColors.inkMuted),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
                       IconButton(
                         icon: const Icon(Icons.close,
