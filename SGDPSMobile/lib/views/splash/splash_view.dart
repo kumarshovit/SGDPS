@@ -629,14 +629,14 @@ class _SplashViewState extends State<SplashView>
                         // HINDI NAME
                         // ==========================
 
-                        Text(
-                          'श्री गणेश दुर्गा पूजा समिति',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppColors.gold.withOpacity(0.92),
-                            letterSpacing: 0.7,
-                          ),
-                        ),
+                        // Text(
+                        //   'श्री गणेश दुर्गा पूजा समिति',
+                        //   style: TextStyle(
+                        //     fontSize: 14,
+                        //     color: AppColors.gold.withOpacity(0.92),
+                        //     letterSpacing: 0.7,
+                        //   ),
+                        // ),
 
                         const SizedBox(height: 18),
 

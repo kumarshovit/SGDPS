@@ -54,7 +54,8 @@ class _ReportsViewState extends State<ReportsView> {
   Future<void> _loadData() async {
     await Future.wait([
       Provider.of<FlatProvider>(context, listen: false).fetchFlats(),
-      Provider.of<CollectionProvider>(context, listen: false).fetchCollections(),
+      Provider.of<CollectionProvider>(context, listen: false)
+          .fetchCollections(),
     ]);
   }
 
@@ -80,7 +81,8 @@ class _ReportsViewState extends State<ReportsView> {
       case ReportPeriod.thisMonth:
         return DateFormat('MMMM yyyy').format(now);
       case ReportPeriod.lastMonth:
-        return DateFormat('MMMM yyyy').format(DateTime(now.year, now.month - 1, 1));
+        return DateFormat('MMMM yyyy')
+            .format(DateTime(now.year, now.month - 1, 1));
       case ReportPeriod.customMonth:
         return DateFormat('MMMM yyyy').format(_customMonthDate);
     }
@@ -126,9 +128,8 @@ class _ReportsViewState extends State<ReportsView> {
         : allCollections;
 
     // Sponsorship collections in this period
-    final periodSponsorships = periodCollections
-        .where((c) => c.type == 'SponsorshipOther')
-        .toList();
+    final periodSponsorships =
+        periodCollections.where((c) => c.type == 'SponsorshipOther').toList();
     final double totalSponsorshipAmount =
         periodSponsorships.fold(0.0, (sum, c) => sum + c.amount);
 
@@ -176,13 +177,16 @@ class _ReportsViewState extends State<ReportsView> {
 
     if (!isMonthly) {
       // Overall Puja Target
-      paidCount = flats.where((f) => f.paymentStatus.toLowerCase() == 'paid').length;
-      unpaidCount = flats.where((f) => f.paymentStatus.toLowerCase() != 'paid').length;
+      paidCount =
+          flats.where((f) => f.paymentStatus.toLowerCase() == 'paid').length;
+      unpaidCount =
+          flats.where((f) => f.paymentStatus.toLowerCase() != 'paid').length;
       totalCollected = flats.fold(0.0, (sum, f) => sum + f.totalCollected);
       totalUnpaid = flats.fold(0.0, (sum, f) => sum + f.pendingAmount);
     } else {
       // Monthly Specific
-      paidCount = flats.where((f) => (flatPeriodCollections[f.id] ?? 0.0) > 0).length;
+      paidCount =
+          flats.where((f) => (flatPeriodCollections[f.id] ?? 0.0) > 0).length;
       unpaidCount = totalFlats - paidCount;
       totalCollected = periodCollections
           .where((c) => c.type != 'SponsorshipOther')
@@ -197,7 +201,10 @@ class _ReportsViewState extends State<ReportsView> {
         totalFlats > 0 ? (paidCount / totalFlats) * 100 : 0.0;
 
     // Distinct Blocks
-    final blocks = ['All', ...flats.map((f) => f.block).toSet().toList()..sort()];
+    final blocks = [
+      'All',
+      ...flats.map((f) => f.block).toSet().toList()..sort()
+    ];
 
     // Filtered Flats List
     final filteredFlats = flats.where((flat) {
@@ -249,10 +256,11 @@ class _ReportsViewState extends State<ReportsView> {
       // Search Query Filter
       if (_searchQuery.isNotEmpty) {
         final q = _searchQuery.toLowerCase();
-        final match = (s.donorResidentName?.toLowerCase().contains(q) ?? false) ||
-            (s.category?.toLowerCase().contains(q) ?? false) ||
-            (s.receiptNumber.toLowerCase().contains(q)) ||
-            (s.collectedByName?.toLowerCase().contains(q) ?? false);
+        final match =
+            (s.donorResidentName?.toLowerCase().contains(q) ?? false) ||
+                (s.category?.toLowerCase().contains(q) ?? false) ||
+                (s.receiptNumber.toLowerCase().contains(q)) ||
+                (s.collectedByName?.toLowerCase().contains(q) ?? false);
         if (!match) return false;
       }
 
@@ -273,7 +281,10 @@ class _ReportsViewState extends State<ReportsView> {
           children: [
             const Text(
               'Collection Reports',
-              style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.bold, fontSize: 18),
+              style: TextStyle(
+                  fontFamily: 'serif',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18),
             ),
             Text(
               '${_getPeriodLabel()} · Paid vs Unpaid',
@@ -309,24 +320,28 @@ class _ReportsViewState extends State<ReportsView> {
                           _buildPeriodChip(
                             label: 'Overall Puja Cycle',
                             isSelected: _period == ReportPeriod.overall,
-                            onTap: () => setState(() => _period = ReportPeriod.overall),
+                            onTap: () =>
+                                setState(() => _period = ReportPeriod.overall),
                           ),
                           const SizedBox(width: 6),
                           _buildPeriodChip(
                             label: 'This Month',
                             isSelected: _period == ReportPeriod.thisMonth,
-                            onTap: () => setState(() => _period = ReportPeriod.thisMonth),
+                            onTap: () => setState(
+                                () => _period = ReportPeriod.thisMonth),
                           ),
                           const SizedBox(width: 6),
                           _buildPeriodChip(
                             label: 'Last Month',
                             isSelected: _period == ReportPeriod.lastMonth,
-                            onTap: () => setState(() => _period = ReportPeriod.lastMonth),
+                            onTap: () => setState(
+                                () => _period = ReportPeriod.lastMonth),
                           ),
                           const SizedBox(width: 6),
                           _buildPeriodChip(
                             label: _period == ReportPeriod.customMonth
-                                ? DateFormat('MMM yyyy').format(_customMonthDate)
+                                ? DateFormat('MMM yyyy')
+                                    .format(_customMonthDate)
                                 : 'Select Month 📅',
                             isSelected: _period == ReportPeriod.customMonth,
                             onTap: _pickCustomMonth,
@@ -339,10 +354,15 @@ class _ReportsViewState extends State<ReportsView> {
                   // 2. KPI Metrics Header
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [AppColors.maroonDark, AppColors.maroon, Color(0xFF631520)],
+                        colors: [
+                          AppColors.maroonDark,
+                          AppColors.maroon,
+                          Color(0xFF631520)
+                        ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -386,10 +406,12 @@ class _ReportsViewState extends State<ReportsView> {
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: LinearProgressIndicator(
-                            value: totalFlats > 0 ? (paidCount / totalFlats) : 0,
+                            value:
+                                totalFlats > 0 ? (paidCount / totalFlats) : 0,
                             minHeight: 7,
                             backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(AppColors.forest),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                AppColors.forest),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -399,16 +421,20 @@ class _ReportsViewState extends State<ReportsView> {
                           children: [
                             Expanded(
                               child: _buildHeaderMetric(
-                                label: isMonthly ? 'Paid in Month' : 'Paid Units',
+                                label:
+                                    isMonthly ? 'Paid in Month' : 'Paid Units',
                                 count: '$paidCount / $totalFlats units',
                                 amount: '₹${totalCollected.toStringAsFixed(0)}',
                                 textColor: AppColors.forestLight,
                               ),
                             ),
-                            Container(width: 1, height: 36, color: Colors.white24),
+                            Container(
+                                width: 1, height: 36, color: Colors.white24),
                             Expanded(
                               child: _buildHeaderMetric(
-                                label: isMonthly ? 'Unpaid in Month' : 'Unpaid Units',
+                                label: isMonthly
+                                    ? 'Unpaid in Month'
+                                    : 'Unpaid Units',
                                 count: '$unpaidCount / $totalFlats units',
                                 amount: isMonthly
                                     ? '${periodCollections.length} total txns'
@@ -416,12 +442,14 @@ class _ReportsViewState extends State<ReportsView> {
                                 textColor: AppColors.goldLight,
                               ),
                             ),
-                            Container(width: 1, height: 36, color: Colors.white24),
+                            Container(
+                                width: 1, height: 36, color: Colors.white24),
                             Expanded(
                               child: _buildHeaderMetric(
                                 label: 'Sponsorships',
                                 count: '${periodSponsorships.length} donors',
-                                amount: '₹${totalSponsorshipAmount.toStringAsFixed(0)}',
+                                amount:
+                                    '₹${totalSponsorshipAmount.toStringAsFixed(0)}',
                                 textColor: AppColors.gold,
                               ),
                             ),
@@ -432,7 +460,8 @@ class _ReportsViewState extends State<ReportsView> {
                         if (isMonthly && periodCollections.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(8),
@@ -446,7 +475,7 @@ class _ReportsViewState extends State<ReportsView> {
                                 _buildModePill('📑 Cheque', monthlyCheque),
                               ],
                             ),
-                          ),
+                          )
                         ],
                       ],
                     ),
@@ -455,18 +484,25 @@ class _ReportsViewState extends State<ReportsView> {
                   // 3. Status Segment Tabs (All, Paid, Unpaid, Sponsorship)
                   Container(
                     color: AppColors.creamCard,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          _buildStatusTab('All', 'All (${flats.length})', AppColors.maroonDark),
+                          _buildStatusTab('All', 'All (${flats.length})',
+                              AppColors.maroonDark),
                           const SizedBox(width: 6),
-                          _buildStatusTab('Paid', 'Paid ($paidCount)', AppColors.forest),
+                          _buildStatusTab(
+                              'Paid', 'Paid ($paidCount)', AppColors.forest),
                           const SizedBox(width: 6),
-                          _buildStatusTab('Unpaid', 'Unpaid ($unpaidCount)', AppColors.goldDark),
+                          _buildStatusTab('Unpaid', 'Unpaid ($unpaidCount)',
+                              AppColors.goldDark),
                           const SizedBox(width: 6),
-                          _buildStatusTab('Sponsorship', '🌟 Sponsorships (${periodSponsorships.length})', const Color(0xFF6B1826)),
+                          _buildStatusTab(
+                              'Sponsorship',
+                              '🌟 Sponsorships (${periodSponsorships.length})',
+                              const Color(0xFF6B1826)),
                         ],
                       ),
                     ),
@@ -481,24 +517,30 @@ class _ReportsViewState extends State<ReportsView> {
                         TextField(
                           onChanged: (v) => setState(() => _searchQuery = v),
                           cursorColor: AppColors.saffron,
-                          style: const TextStyle(fontSize: 13, color: Color(0xFF1C1310)),
+                          style: const TextStyle(
+                              fontSize: 13, color: Color(0xFF1C1310)),
                           decoration: InputDecoration(
                             hintText: _selectedStatus == 'Sponsorship'
                                 ? 'Search donor name, category, receipt...'
                                 : 'Search by flat #, owner name, block...',
-                            hintStyle: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
-                            prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.inkMuted),
+                            hintStyle: const TextStyle(
+                                fontSize: 12, color: AppColors.inkMuted),
+                            prefixIcon: const Icon(Icons.search,
+                                size: 18, color: AppColors.inkMuted),
                             filled: true,
                             fillColor: AppColors.cream,
                             isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                            contentPadding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 12),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: AppColors.creamBorder),
+                              borderSide: const BorderSide(
+                                  color: AppColors.creamBorder),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: AppColors.gold, width: 1.5),
+                              borderSide: const BorderSide(
+                                  color: AppColors.gold, width: 1.5),
                             ),
                           ),
                         ),
@@ -516,7 +558,12 @@ class _ReportsViewState extends State<ReportsView> {
                                     : periodSponsorships.where((s) {
                                         final scat = s.category ?? 'Other';
                                         if (cat == 'Other') {
-                                          return !_allCategoryOptions.sublist(1, _allCategoryOptions.length - 1).contains(scat);
+                                          return !_allCategoryOptions
+                                              .sublist(
+                                                  1,
+                                                  _allCategoryOptions.length -
+                                                      1)
+                                              .contains(scat);
                                         }
                                         return scat == cat;
                                       }).length;
@@ -528,16 +575,21 @@ class _ReportsViewState extends State<ReportsView> {
                                     selected: isSelected,
                                     selectedColor: const Color(0xFF6B1826),
                                     labelStyle: TextStyle(
-                                      color: isSelected ? Colors.white : AppColors.ink,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppColors.ink,
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     backgroundColor: AppColors.cream,
                                     side: BorderSide(
-                                      color: isSelected ? const Color(0xFF6B1826) : AppColors.creamBorder,
+                                      color: isSelected
+                                          ? const Color(0xFF6B1826)
+                                          : AppColors.creamBorder,
                                     ),
                                     onSelected: (sel) {
-                                      if (sel) setState(() => _selectedCategory = cat);
+                                      if (sel)
+                                        setState(() => _selectedCategory = cat);
                                     },
                                   ),
                                 );
@@ -559,16 +611,21 @@ class _ReportsViewState extends State<ReportsView> {
                                     selected: isSelected,
                                     selectedColor: AppColors.maroonDark,
                                     labelStyle: TextStyle(
-                                      color: isSelected ? Colors.white : AppColors.ink,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppColors.ink,
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
                                     ),
                                     backgroundColor: AppColors.cream,
                                     side: BorderSide(
-                                      color: isSelected ? AppColors.maroonDark : AppColors.creamBorder,
+                                      color: isSelected
+                                          ? AppColors.maroonDark
+                                          : AppColors.creamBorder,
                                     ),
                                     onSelected: (sel) {
-                                      if (sel) setState(() => _selectedBlock = block);
+                                      if (sel)
+                                        setState(() => _selectedBlock = block);
                                     },
                                   ),
                                 );
@@ -614,7 +671,8 @@ class _ReportsViewState extends State<ReportsView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.volunteer_activism_outlined, size: 48, color: AppColors.inkLight),
+              const Icon(Icons.volunteer_activism_outlined,
+                  size: 48, color: AppColors.inkLight),
               const SizedBox(height: 8),
               Text(
                 _selectedCategory == 'All'
@@ -667,7 +725,10 @@ class _ReportsViewState extends State<ReportsView> {
                         onTap: () => setState(() => _selectedCategory = 'All'),
                         child: const Text(
                           'Clear Filter',
-                          style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.saffron,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                   ],
@@ -679,15 +740,21 @@ class _ReportsViewState extends State<ReportsView> {
                   children: categoryTotals.entries.map((entry) {
                     final isCurrent = _selectedCategory == entry.key;
                     return InkWell(
-                      onTap: () => setState(() => _selectedCategory = entry.key),
+                      onTap: () =>
+                          setState(() => _selectedCategory = entry.key),
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: isCurrent ? const Color(0xFF6B1826) : AppColors.goldSoft,
+                          color: isCurrent
+                              ? const Color(0xFF6B1826)
+                              : AppColors.goldSoft,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: isCurrent ? const Color(0xFF6B1826) : AppColors.gold.withOpacity(0.3),
+                            color: isCurrent
+                                ? const Color(0xFF6B1826)
+                                : AppColors.gold.withOpacity(0.3),
                           ),
                         ),
                         child: Text(
@@ -695,7 +762,8 @@ class _ReportsViewState extends State<ReportsView> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: isCurrent ? Colors.white : AppColors.maroonDark,
+                            color:
+                                isCurrent ? Colors.white : AppColors.maroonDark,
                           ),
                         ),
                       ),
@@ -740,7 +808,8 @@ class _ReportsViewState extends State<ReportsView> {
         ),
         title: Text(
           item.donorResidentName ?? 'Devotee / Sponsor',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink),
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -754,7 +823,10 @@ class _ReportsViewState extends State<ReportsView> {
               ),
               child: Text(
                 item.category ?? 'Other',
-                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.maroonDark),
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.maroonDark),
               ),
             ),
             const SizedBox(height: 4),
@@ -781,7 +853,8 @@ class _ReportsViewState extends State<ReportsView> {
             InkWell(
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => ReceiptView(collection: item)),
+                  MaterialPageRoute(
+                      builder: (_) => ReceiptView(collection: item)),
                 );
               },
               child: const Text(
@@ -811,7 +884,8 @@ class _ReportsViewState extends State<ReportsView> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.apartment_outlined, size: 48, color: AppColors.inkLight),
+              const Icon(Icons.apartment_outlined,
+                  size: 48, color: AppColors.inkLight),
               const SizedBox(height: 8),
               Text(
                 'No ${_selectedStatus == "All" ? "" : _selectedStatus} units found in ${_getPeriodLabel()}',
@@ -865,10 +939,44 @@ class _ReportsViewState extends State<ReportsView> {
     );
   }
 
+  // Widget _buildModePill(String label, double amount) {
+  //   return Text(
+  //     '$label: ₹${amount.toStringAsFixed(0)}',
+  //     style: const TextStyle(
+  //         fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
+  //   );
+  // }
   Widget _buildModePill(String label, double amount) {
-    return Text(
-      '$label: ₹${amount.toStringAsFixed(0)}',
-      style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
+    return Expanded(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 9,
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '₹${amount.toStringAsFixed(0)}',
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 11,
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -887,11 +995,16 @@ class _ReportsViewState extends State<ReportsView> {
         const SizedBox(height: 2),
         Text(
           count,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
         ),
         Text(
           amount,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif'),
+          style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              fontFamily: 'serif'),
         ),
       ],
     );
@@ -943,7 +1056,9 @@ class _ReportsViewState extends State<ReportsView> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(
-          color: isPaid ? AppColors.forest.withOpacity(0.3) : AppColors.creamBorder,
+          color: isPaid
+              ? AppColors.forest.withOpacity(0.3)
+              : AppColors.creamBorder,
         ),
       ),
       child: Padding(
@@ -958,7 +1073,9 @@ class _ReportsViewState extends State<ReportsView> {
                 color: isPaid ? AppColors.forestLight : AppColors.goldSoft,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isPaid ? AppColors.forest.withOpacity(0.3) : AppColors.gold.withOpacity(0.3),
+                  color: isPaid
+                      ? AppColors.forest.withOpacity(0.3)
+                      : AppColors.gold.withOpacity(0.3),
                 ),
               ),
               child: Center(
@@ -991,9 +1108,12 @@ class _ReportsViewState extends State<ReportsView> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: isPaid ? AppColors.forestLight : AppColors.goldSoft,
+                          color: isPaid
+                              ? AppColors.forestLight
+                              : AppColors.goldSoft,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -1003,7 +1123,8 @@ class _ReportsViewState extends State<ReportsView> {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
-                            color: isPaid ? AppColors.forest : AppColors.goldDark,
+                            color:
+                                isPaid ? AppColors.forest : AppColors.goldDark,
                           ),
                         ),
                       ),
@@ -1012,12 +1133,14 @@ class _ReportsViewState extends State<ReportsView> {
                   const SizedBox(height: 2),
                   Text(
                     flat.ownerName,
-                    style: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.inkMuted),
                   ),
                   if (flat.ownerPhone.isNotEmpty)
                     Text(
                       '📞 ${flat.ownerPhone}',
-                      style: const TextStyle(fontSize: 10, color: AppColors.inkLight),
+                      style: const TextStyle(
+                          fontSize: 10, color: AppColors.inkLight),
                     ),
                 ],
               ),
@@ -1055,14 +1178,18 @@ class _ReportsViewState extends State<ReportsView> {
                     },
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppColors.saffron,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
                         'Collect >',
-                        style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
