@@ -12,33 +12,55 @@ class ReceiptView extends StatelessWidget {
 
   void _shareReceipt() {
     final formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(collection.collectionDateTime);
-    final text = '''
-✨ *SGDPS OFFICIAL COLLECTION RECEIPT* ✨
+    final isSponsorship = collection.type == 'SponsorshipOther';
+
+    final text = isSponsorship
+        ? '''
+✨ *SGDPS OFFICIAL SPONSORSHIP RECEIPT* ✨
 ━━━━━━━━━━━━━━━━━━━━
 📄 *Receipt No:* ${collection.receiptNumber}
 📅 *Date:* $formattedDate
-🏢 *Flat:* ${collection.block ?? ''} · Fl ${collection.floor ?? ''} · Flat ${collection.flatNumber ?? ''}
+🌟 *Category:* ${collection.category ?? 'General Sponsorship'}
+👤 *Donor / Sponsor:* ${collection.donorResidentName ?? 'Devotee'}
+💰 *Amount Contributed:* ₹${collection.amount.toStringAsFixed(0)}
+💳 *Payment Mode:* ${collection.mode}
+${collection.transactionReference != null && collection.transactionReference!.isNotEmpty ? '🔖 *Reference No:* ' + collection.transactionReference! : ''}
+👮 *Collected By:* ${collection.collectedByName ?? 'Collector'}
+━━━━━━━━━━━━━━━━━━━━
+Thank you for your generous devotion & sponsorship towards Durga Puja 2026!
+'''
+        : '''
+✨ *SGDPS OFFICIAL RESIDENT RECEIPT* ✨
+━━━━━━━━━━━━━━━━━━━━
+📄 *Receipt No:* ${collection.receiptNumber}
+📅 *Date:* $formattedDate
+🏢 *Flat Unit:* ${collection.block ?? ''} · Fl ${collection.floor ?? ''} · Flat ${collection.flatNumber ?? ''}
 👤 *Received From:* ${collection.donorResidentName ?? 'Resident'}
 💰 *Amount Received:* ₹${collection.amount.toStringAsFixed(0)}
 💳 *Payment Mode:* ${collection.mode}
-${collection.transactionReference != null ? '🔖 *Reference No:* ' + collection.transactionReference! : ''}
+${collection.transactionReference != null && collection.transactionReference!.isNotEmpty ? '🔖 *Reference No:* ' + collection.transactionReference! : ''}
 👮 *Collected By:* ${collection.collectedByName ?? 'Collector'}
 ━━━━━━━━━━━━━━━━━━━━
 Thank you for your devotion & contribution!
 ''';
-    Share.share(text, subject: 'SGDPS Collection Receipt');
+
+    Share.share(text.trim(), subject: 'SGDPS Collection Receipt');
   }
 
   @override
   Widget build(BuildContext context) {
     final formattedDate = DateFormat('dd MMM yyyy, hh:mm a').format(collection.collectionDateTime);
+    final isSponsorship = collection.type == 'SponsorshipOther';
 
     return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: AppBar(
         backgroundColor: AppColors.maroonDark,
         foregroundColor: Colors.white,
-        title: const Text('Official Receipt', style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.bold)),
+        title: Text(
+          isSponsorship ? 'Sponsorship Receipt' : 'Official Receipt',
+          style: const TextStyle(fontFamily: 'serif', fontWeight: FontWeight.bold),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
@@ -74,9 +96,9 @@ Thank you for your devotion & contribution!
                 child: const Icon(Icons.check, color: AppColors.forest, size: 38),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Payment Logged Successfully!',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.forest),
+              Text(
+                isSponsorship ? 'Sponsorship Logged Successfully!' : 'Payment Logged Successfully!',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.forest),
               ),
               const SizedBox(height: 16),
 
@@ -105,19 +127,43 @@ Thank you for your devotion & contribution!
                               'Receipt #${collection.receiptNumber}',
                               style: const TextStyle(fontSize: 11, color: AppColors.goldDark, fontWeight: FontWeight.bold),
                             ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isSponsorship ? AppColors.goldSoft : AppColors.creamBorder,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                isSponsorship ? '🌟 SPONSORSHIP / DONATION' : '🏢 RESIDENTIAL COLLECTION',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSponsorship ? AppColors.maroonDark : AppColors.inkMuted,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       const Divider(color: AppColors.creamBorder, thickness: 1),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
 
                       _buildReceiptRow('Date & Time', formattedDate),
-                      _buildReceiptRow(
-                        'Resident Unit',
-                        '${collection.block ?? ""} - ${collection.flatNumber ?? ""}',
-                      ),
-                      _buildReceiptRow('Received From', collection.donorResidentName ?? 'Resident'),
+                      
+                      if (isSponsorship) ...[
+                        if (collection.category != null)
+                          _buildReceiptRow('Category', collection.category!),
+                        _buildReceiptRow('Donor / Sponsor', collection.donorResidentName ?? 'Devotee'),
+                      ] else ...[
+                        _buildReceiptRow(
+                          'Resident Unit',
+                          '${collection.block ?? ""} - ${collection.flatNumber ?? ""}',
+                        ),
+                        _buildReceiptRow('Received From', collection.donorResidentName ?? 'Resident'),
+                      ],
+
                       _buildReceiptRow('Payment Mode', collection.mode),
                       if (collection.transactionReference != null && collection.transactionReference!.isNotEmpty)
                         _buildReceiptRow('Reference No', collection.transactionReference!),
@@ -139,7 +185,7 @@ Thank you for your devotion & contribution!
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text(
-                              'Amount Paid',
+                              'Amount Contributed',
                               style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.maroonDark),
                             ),
                             Text(
@@ -211,7 +257,15 @@ Thank you for your devotion & contribution!
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 12, color: AppColors.inkMuted)),
-          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ink)),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.ink),
+              textAlign: TextAlign.right,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );

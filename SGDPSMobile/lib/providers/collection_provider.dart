@@ -139,8 +139,51 @@ class CollectionProvider extends ChangeNotifier {
     }
   }
 
+  double getSponsorshipTotal({DateTime? startDate, DateTime? endDate}) {
+    final list = getFilteredCollections(
+      startDate: startDate,
+      endDate: endDate,
+      type: 'SponsorshipOther',
+    );
+    return list.fold(0.0, (sum, c) => sum + c.amount);
+  }
+
+  int getSponsorshipCount({DateTime? startDate, DateTime? endDate}) {
+    final list = getFilteredCollections(
+      startDate: startDate,
+      endDate: endDate,
+      type: 'SponsorshipOther',
+    );
+    return list.length;
+  }
+
+  double getResidentTotal({DateTime? startDate, DateTime? endDate}) {
+    final list = getFilteredCollections(
+      startDate: startDate,
+      endDate: endDate,
+      type: 'ResidentBlock',
+    );
+    return list.fold(0.0, (sum, c) => sum + c.amount);
+  }
+
+  int getResidentCount({DateTime? startDate, DateTime? endDate}) {
+    final list = getFilteredCollections(
+      startDate: startDate,
+      endDate: endDate,
+      type: 'ResidentBlock',
+    );
+    return list.length;
+  }
+
   Future<CollectionModel?> submitCollection({
-    required FlatModel flat,
+    String type = 'ResidentBlock',
+    FlatModel? flat,
+    String? block,
+    int? floor,
+    String? flatNumber,
+    String? category,
+    String? donorResidentName,
+    String? ownerPhone,
     required double amount,
     required String mode,
     required String collectorName,
@@ -156,13 +199,8 @@ class CollectionProvider extends ChangeNotifier {
       // Auto-capture GPS location in the background
       final position = await LocationService.getCurrentLocation();
 
-      final payload = {
-        'type': 'ResidentBlock',
-        'flatId': flat.id,
-        'block': flat.block,
-        'floor': flat.floor,
-        'flatNumber': flat.flatNumber,
-        'donorResidentName': flat.ownerName,
+      final payload = <String, dynamic>{
+        'type': type,
         'amount': amount,
         'mode': mode,
         'transactionReference': referenceNo,
@@ -171,10 +209,29 @@ class CollectionProvider extends ChangeNotifier {
         'collectedByUserId': collectorUserId,
         'collectedByName': collectorName,
         'remarks': remarks,
-        'collectionDateTime': DateTime.now().toIso8601String(),
+        'collectionDateTime': DateTime.now().toUtc().toIso8601String(),
       };
 
+      if (type == 'ResidentBlock') {
+        payload['flatId'] = flat?.id;
+        payload['block'] = block ?? flat?.block;
+        payload['floor'] = floor ?? flat?.floor;
+        payload['flatNumber'] = flatNumber ?? flat?.flatNumber;
+        payload['donorResidentName'] = donorResidentName ?? flat?.ownerName;
+        if (ownerPhone != null && ownerPhone.isNotEmpty) {
+          payload['ownerPhone'] = ownerPhone;
+        }
+      } else {
+        payload['category'] = category;
+        payload['donorResidentName'] = donorResidentName;
+        if (ownerPhone != null && ownerPhone.isNotEmpty) {
+          payload['ownerPhone'] = ownerPhone;
+        }
+      }
+
+      debugPrint('COLLECTION SUBMIT PAYLOAD: ${jsonEncode(payload)}');
       final response = await ApiClient.post(ApiConstants.collections, payload);
+      debugPrint('COLLECTION SUBMIT RESPONSE [${response.statusCode}]: ${response.body}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -184,14 +241,19 @@ class CollectionProvider extends ChangeNotifier {
         notifyListeners();
         return newCollection;
       } else {
-        final data = jsonDecode(response.body);
-        _errorMessage = data['detail'] ?? 'Failed to submit collection';
+        try {
+          final data = jsonDecode(response.body);
+          _errorMessage = data['detail'] ?? data['title'] ?? 'Server error (${response.statusCode})';
+        } catch (_) {
+          _errorMessage = 'Server returned status ${response.statusCode}';
+        }
         _isSubmitting = false;
         notifyListeners();
         return null;
       }
-    } catch (e) {
-      _errorMessage = 'Network error: Collection not recorded';
+    } catch (e, stack) {
+      debugPrint('SUBMIT COLLECTION EXCEPTION: $e\n$stack');
+      _errorMessage = 'Network connection failed: $e';
       _isSubmitting = false;
       notifyListeners();
       return null;

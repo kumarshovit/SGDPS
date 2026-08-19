@@ -43,9 +43,17 @@ class CollectionModel {
     if (val == null) return DateTime.now();
     final str = val.toString().trim();
     if (str.isEmpty) return DateTime.now();
-    final parsed = DateTime.tryParse(str);
-    if (parsed == null) return DateTime.now();
-    return parsed.isUtc ? parsed.toLocal() : parsed;
+
+    try {
+      if (str.endsWith('Z') || str.contains('+')) {
+        return DateTime.parse(str).toLocal();
+      } else {
+        return DateTime.parse('${str}Z').toLocal();
+      }
+    } catch (_) {
+      final dt = DateTime.tryParse(str);
+      return dt != null ? (dt.isUtc ? dt.toLocal() : dt) : DateTime.now();
+    }
   }
 
   factory CollectionModel.fromJson(Map<String, dynamic> json) {

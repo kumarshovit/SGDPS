@@ -7,6 +7,7 @@ import '../../models/flat_model.dart';
 import '../../providers/collection_provider.dart';
 import '../../providers/flat_provider.dart';
 import '../collection/add_collection_view.dart';
+import '../collection/receipt_view.dart';
 
 enum ReportPeriod { overall, thisMonth, lastMonth, customMonth }
 
@@ -21,9 +22,26 @@ class _ReportsViewState extends State<ReportsView> {
   ReportPeriod _period = ReportPeriod.overall;
   DateTime _customMonthDate = DateTime.now();
 
-  String _selectedStatus = 'All'; // 'All', 'Paid', 'Pending'
+  String _selectedStatus = 'All'; // 'All', 'Paid', 'Unpaid', 'Sponsorship'
   String _selectedBlock = 'All';
+  String _selectedCategory = 'All'; // 'All' or specific category
   String _searchQuery = '';
+
+  final List<String> _allCategoryOptions = [
+    'All',
+    'Sponsorship - Pratima',
+    'Sponsorship - Decoration',
+    'Sponsorship - Bhog',
+    'Sponsorship - Bisarjan',
+    'Sponsorship - Banners',
+    'Sponsorship - Rice',
+    'Stall Collection',
+    'Cultural',
+    'Mata Ki Chowki',
+    'Anandomela',
+    'Interest Earned',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -107,11 +125,27 @@ class _ReportsViewState extends State<ReportsView> {
           }).toList()
         : allCollections;
 
+    // Sponsorship collections in this period
+    final periodSponsorships = periodCollections
+        .where((c) => c.type == 'SponsorshipOther')
+        .toList();
+    final double totalSponsorshipAmount =
+        periodSponsorships.fold(0.0, (sum, c) => sum + c.amount);
+
+    // Category breakdown for sponsorships
+    final Map<String, double> sponsorshipCategoryTotals = {};
+    for (final s in periodSponsorships) {
+      final cat = s.category ?? 'Other';
+      sponsorshipCategoryTotals[cat] =
+          (sponsorshipCategoryTotals[cat] ?? 0.0) + s.amount;
+    }
+
     // Map flatId to collection total in this period
     final Map<int, double> flatPeriodCollections = {};
     for (final c in periodCollections) {
       if (c.flatId != null) {
-        flatPeriodCollections[c.flatId!] = (flatPeriodCollections[c.flatId!] ?? 0.0) + c.amount;
+        flatPeriodCollections[c.flatId!] =
+            (flatPeriodCollections[c.flatId!] ?? 0.0) + c.amount;
       }
     }
 
@@ -133,31 +167,34 @@ class _ReportsViewState extends State<ReportsView> {
       }
     }
 
-    // Aggregate Metrics
+    // Aggregate Resident Metrics
     final int totalFlats = flats.length;
     int paidCount = 0;
-    int pendingCount = 0;
+    int unpaidCount = 0;
     double totalCollected = 0.0;
-    double totalPending = 0.0;
+    double totalUnpaid = 0.0;
 
     if (!isMonthly) {
       // Overall Puja Target
       paidCount = flats.where((f) => f.paymentStatus.toLowerCase() == 'paid').length;
-      pendingCount = flats.where((f) => f.paymentStatus.toLowerCase() != 'paid').length;
+      unpaidCount = flats.where((f) => f.paymentStatus.toLowerCase() != 'paid').length;
       totalCollected = flats.fold(0.0, (sum, f) => sum + f.totalCollected);
-      totalPending = flats.fold(0.0, (sum, f) => sum + f.pendingAmount);
+      totalUnpaid = flats.fold(0.0, (sum, f) => sum + f.pendingAmount);
     } else {
       // Monthly Specific
       paidCount = flats.where((f) => (flatPeriodCollections[f.id] ?? 0.0) > 0).length;
-      pendingCount = totalFlats - paidCount;
-      totalCollected = periodCollections.fold(0.0, (sum, c) => sum + c.amount);
-      totalPending = flats.fold(0.0, (sum, f) {
+      unpaidCount = totalFlats - paidCount;
+      totalCollected = periodCollections
+          .where((c) => c.type != 'SponsorshipOther')
+          .fold(0.0, (sum, c) => sum + c.amount);
+      totalUnpaid = flats.fold(0.0, (sum, f) {
         final paidInMonth = flatPeriodCollections[f.id] ?? 0.0;
         return sum + (paidInMonth > 0 ? 0 : f.expectedAmount);
       });
     }
 
-    final double completionPercentage = totalFlats > 0 ? (paidCount / totalFlats) * 100 : 0.0;
+    final double completionPercentage =
+        totalFlats > 0 ? (paidCount / totalFlats) * 100 : 0.0;
 
     // Distinct Blocks
     final blocks = ['All', ...flats.map((f) => f.block).toSet().toList()..sort()];
@@ -172,7 +209,7 @@ class _ReportsViewState extends State<ReportsView> {
       if (_selectedStatus == 'Paid' && !flatIsPaid) {
         return false;
       }
-      if (_selectedStatus == 'Pending' && flatIsPaid) {
+      if (_selectedStatus == 'Unpaid' && flatIsPaid) {
         return false;
       }
 
@@ -194,6 +231,37 @@ class _ReportsViewState extends State<ReportsView> {
       return true;
     }).toList();
 
+    // Filtered Sponsorships List with Category Filter
+    final filteredSponsorships = periodSponsorships.where((s) {
+      // Category Filter
+      if (_selectedCategory != 'All') {
+        final cat = s.category ?? 'Other';
+        if (_selectedCategory == 'Other') {
+          final isStandard = _allCategoryOptions
+              .sublist(1, _allCategoryOptions.length - 1)
+              .contains(cat);
+          if (isStandard) return false;
+        } else if (cat != _selectedCategory) {
+          return false;
+        }
+      }
+
+      // Search Query Filter
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        final match = (s.donorResidentName?.toLowerCase().contains(q) ?? false) ||
+            (s.category?.toLowerCase().contains(q) ?? false) ||
+            (s.receiptNumber.toLowerCase().contains(q)) ||
+            (s.collectedByName?.toLowerCase().contains(q) ?? false);
+        if (!match) return false;
+      }
+
+      return true;
+    }).toList();
+
+    final double filteredSponsorshipTotal =
+        filteredSponsorships.fold(0.0, (sum, s) => sum + s.amount);
+
     return Scaffold(
       backgroundColor: AppColors.cream,
       appBar: AppBar(
@@ -208,7 +276,7 @@ class _ReportsViewState extends State<ReportsView> {
               style: TextStyle(fontFamily: 'serif', fontWeight: FontWeight.bold, fontSize: 18),
             ),
             Text(
-              '${_getPeriodLabel()} · Paid vs Pending',
+              '${_getPeriodLabel()} · Paid vs Unpaid',
               style: const TextStyle(fontSize: 11, color: AppColors.goldLight),
             ),
           ],
@@ -295,7 +363,7 @@ class _ReportsViewState extends State<ReportsView> {
                           children: [
                             Text(
                               isMonthly
-                                  ? '${_getPeriodLabel().toUpperCase()} COVERAGE'
+                                  ? '${_getPeriodLabel().toUpperCase()} RESIDENT COVERAGE'
                                   : 'PUJA CYCLE TARGET COMPLETION',
                               style: const TextStyle(
                                 fontSize: 11,
@@ -340,12 +408,21 @@ class _ReportsViewState extends State<ReportsView> {
                             Container(width: 1, height: 36, color: Colors.white24),
                             Expanded(
                               child: _buildHeaderMetric(
-                                label: isMonthly ? 'Unpaid in Month' : 'Pending Units',
-                                count: '$pendingCount / $totalFlats units',
+                                label: isMonthly ? 'Unpaid in Month' : 'Unpaid Units',
+                                count: '$unpaidCount / $totalFlats units',
                                 amount: isMonthly
-                                    ? '${periodCollections.length} txns'
-                                    : '₹${totalPending.toStringAsFixed(0)}',
+                                    ? '${periodCollections.length} total txns'
+                                    : '₹${totalUnpaid.toStringAsFixed(0)}',
                                 textColor: AppColors.goldLight,
+                              ),
+                            ),
+                            Container(width: 1, height: 36, color: Colors.white24),
+                            Expanded(
+                              child: _buildHeaderMetric(
+                                label: 'Sponsorships',
+                                count: '${periodSponsorships.length} donors',
+                                amount: '₹${totalSponsorshipAmount.toStringAsFixed(0)}',
+                                textColor: AppColors.gold,
                               ),
                             ),
                           ],
@@ -375,22 +452,27 @@ class _ReportsViewState extends State<ReportsView> {
                     ),
                   ),
 
-                  // 3. Status Segment Tabs (All, Paid, Pending)
+                  // 3. Status Segment Tabs (All, Paid, Unpaid, Sponsorship)
                   Container(
                     color: AppColors.creamCard,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      children: [
-                        _buildStatusTab('All', 'All (${flats.length})', AppColors.maroonDark),
-                        const SizedBox(width: 8),
-                        _buildStatusTab('Paid', 'Paid ($paidCount)', AppColors.forest),
-                        const SizedBox(width: 8),
-                        _buildStatusTab('Pending', 'Pending ($pendingCount)', AppColors.goldDark),
-                      ],
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _buildStatusTab('All', 'All (${flats.length})', AppColors.maroonDark),
+                          const SizedBox(width: 6),
+                          _buildStatusTab('Paid', 'Paid ($paidCount)', AppColors.forest),
+                          const SizedBox(width: 6),
+                          _buildStatusTab('Unpaid', 'Unpaid ($unpaidCount)', AppColors.goldDark),
+                          const SizedBox(width: 6),
+                          _buildStatusTab('Sponsorship', '🌟 Sponsorships (${periodSponsorships.length})', const Color(0xFF6B1826)),
+                        ],
+                      ),
                     ),
                   ),
 
-                  // 4. Search & Block Filter
+                  // 4. Search & Filter Bar (Blocks for flats, Categories for sponsorships)
                   Container(
                     color: AppColors.creamCard,
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
@@ -401,7 +483,9 @@ class _ReportsViewState extends State<ReportsView> {
                           cursorColor: AppColors.saffron,
                           style: const TextStyle(fontSize: 13, color: Color(0xFF1C1310)),
                           decoration: InputDecoration(
-                            hintText: 'Search by flat #, owner name, block...',
+                            hintText: _selectedStatus == 'Sponsorship'
+                                ? 'Search donor name, category, receipt...'
+                                : 'Search by flat #, owner name, block...',
                             hintStyle: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
                             prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.inkMuted),
                             filled: true,
@@ -418,7 +502,50 @@ class _ReportsViewState extends State<ReportsView> {
                             ),
                           ),
                         ),
-                        if (blocks.length > 2) ...[
+
+                        // If Sponsorships: Show Category Filter Chips
+                        if (_selectedStatus == 'Sponsorship') ...[
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: _allCategoryOptions.map((cat) {
+                                final isSelected = _selectedCategory == cat;
+                                final count = cat == 'All'
+                                    ? periodSponsorships.length
+                                    : periodSponsorships.where((s) {
+                                        final scat = s.category ?? 'Other';
+                                        if (cat == 'Other') {
+                                          return !_allCategoryOptions.sublist(1, _allCategoryOptions.length - 1).contains(scat);
+                                        }
+                                        return scat == cat;
+                                      }).length;
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 6.0),
+                                  child: ChoiceChip(
+                                    label: Text('$cat ($count)'),
+                                    selected: isSelected,
+                                    selectedColor: const Color(0xFF6B1826),
+                                    labelStyle: TextStyle(
+                                      color: isSelected ? Colors.white : AppColors.ink,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    backgroundColor: AppColors.cream,
+                                    side: BorderSide(
+                                      color: isSelected ? const Color(0xFF6B1826) : AppColors.creamBorder,
+                                    ),
+                                    onSelected: (sel) {
+                                      if (sel) setState(() => _selectedCategory = cat);
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ] else if (blocks.length > 2) ...[
+                          // If Resident Flats: Show Block Filter Chips
                           const SizedBox(height: 8),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
@@ -455,40 +582,257 @@ class _ReportsViewState extends State<ReportsView> {
 
                   const Divider(height: 1, color: AppColors.creamBorder),
 
-                  // 5. Flat List
+                  // 5. Main List: Either Sponsorships or Flats
                   Expanded(
-                    child: filteredFlats.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24.0),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.apartment_outlined, size: 48, color: AppColors.inkLight),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'No ${_selectedStatus == "All" ? "" : _selectedStatus} units found in ${_getPeriodLabel()}',
-                                    style: const TextStyle(color: AppColors.inkMuted, fontSize: 14),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
+                    child: _selectedStatus == 'Sponsorship'
+                        ? _buildSponsorshipSection(
+                            filteredSponsorships,
+                            filteredSponsorshipTotal,
+                            sponsorshipCategoryTotals,
                           )
-                        : ListView.separated(
-                            padding: const EdgeInsets.all(12),
-                            itemCount: filteredFlats.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final flat = filteredFlats[index];
-                              final paidInMonth = flatPeriodCollections[flat.id] ?? 0.0;
-                              return _buildFlatCard(flat, isMonthly, paidInMonth);
-                            },
+                        : _buildFlatSection(
+                            filteredFlats,
+                            isMonthly,
+                            flatPeriodCollections,
                           ),
                   ),
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildSponsorshipSection(
+    List<CollectionModel> sponsorships,
+    double totalAmount,
+    Map<String, double> categoryTotals,
+  ) {
+    if (sponsorships.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.volunteer_activism_outlined, size: 48, color: AppColors.inkLight),
+              const SizedBox(height: 8),
+              Text(
+                _selectedCategory == 'All'
+                    ? 'No sponsorships found in ${_getPeriodLabel()}'
+                    : 'No $_selectedCategory donations found in ${_getPeriodLabel()}',
+                style: const TextStyle(color: AppColors.inkMuted, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        // Category Breakdown Card (Tap any pill to filter)
+        if (categoryTotals.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(14),
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: AppColors.creamCard,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.gold.withOpacity(0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Row(
+                      children: [
+                        Text('🌟', style: TextStyle(fontSize: 16)),
+                        SizedBox(width: 6),
+                        Text(
+                          'Sponsorship Breakdown',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.maroonDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_selectedCategory != 'All')
+                      InkWell(
+                        onTap: () => setState(() => _selectedCategory = 'All'),
+                        child: const Text(
+                          'Clear Filter',
+                          style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: categoryTotals.entries.map((entry) {
+                    final isCurrent = _selectedCategory == entry.key;
+                    return InkWell(
+                      onTap: () => setState(() => _selectedCategory = entry.key),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isCurrent ? const Color(0xFF6B1826) : AppColors.goldSoft,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isCurrent ? const Color(0xFF6B1826) : AppColors.gold.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          '${entry.key}: ₹${entry.value.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isCurrent ? Colors.white : AppColors.maroonDark,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+
+        // List of Sponsorship Donation Cards
+        ...sponsorships.map((item) => _buildSponsorshipCard(item)),
+      ],
+    );
+  }
+
+  Widget _buildSponsorshipCard(CollectionModel item) {
+    final df = DateFormat('dd MMM yyyy, hh:mm a');
+    final dateStr = df.format(item.collectionDateTime);
+
+    return Card(
+      color: AppColors.creamCard,
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: AppColors.gold.withOpacity(0.35)),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.gold.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.gold.withOpacity(0.5)),
+          ),
+          child: const Center(
+            child: Text('🌟', style: TextStyle(fontSize: 20)),
+          ),
+        ),
+        title: Text(
+          item.donorResidentName ?? 'Devotee / Sponsor',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.ink),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 2),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.goldSoft,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                item.category ?? 'Other',
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.maroonDark),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${item.mode}${item.collectedByName != null ? " · By " + item.collectedByName! : ""} · $dateStr',
+              style: const TextStyle(fontSize: 11, color: AppColors.inkMuted),
+            ),
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '₹${item.amount.toStringAsFixed(0)}',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.forest,
+                fontFamily: 'serif',
+              ),
+            ),
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => ReceiptView(collection: item)),
+                );
+              },
+              child: const Text(
+                'Receipt >',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.saffron,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlatSection(
+    List<FlatModel> filteredFlats,
+    bool isMonthly,
+    Map<int, double> flatPeriodCollections,
+  ) {
+    if (filteredFlats.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.apartment_outlined, size: 48, color: AppColors.inkLight),
+              const SizedBox(height: 8),
+              Text(
+                'No ${_selectedStatus == "All" ? "" : _selectedStatus} units found in ${_getPeriodLabel()}',
+                style: const TextStyle(color: AppColors.inkMuted, fontSize: 14),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      itemCount: filteredFlats.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final flat = filteredFlats[index];
+        final paidInMonth = flatPeriodCollections[flat.id] ?? 0.0;
+        return _buildFlatCard(flat, isMonthly, paidInMonth);
+      },
     );
   }
 
@@ -538,16 +882,16 @@ class _ReportsViewState extends State<ReportsView> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 11, color: Colors.white70),
+          style: const TextStyle(fontSize: 10, color: Colors.white70),
         ),
         const SizedBox(height: 2),
         Text(
           count,
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
         ),
         Text(
           amount,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif'),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white, fontFamily: 'serif'),
         ),
       ],
     );
@@ -556,27 +900,32 @@ class _ReportsViewState extends State<ReportsView> {
   Widget _buildStatusTab(String statusKey, String label, Color activeColor) {
     final isSelected = _selectedStatus == statusKey;
 
-    return Expanded(
-      child: InkWell(
-        onTap: () => setState(() => _selectedStatus = statusKey),
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? activeColor : AppColors.cream,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isSelected ? activeColor : AppColors.creamBorder,
-            ),
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedStatus = statusKey;
+          if (statusKey == 'Sponsorship') {
+            _selectedCategory = 'All'; // default to all categories
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? activeColor : AppColors.cream,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? activeColor : AppColors.creamBorder,
           ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              color: isSelected ? Colors.white : AppColors.ink,
-            ),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.white : AppColors.ink,
           ),
         ),
       ),
@@ -650,7 +999,7 @@ class _ReportsViewState extends State<ReportsView> {
                         child: Text(
                           isPaid
                               ? (isMonthly ? 'PAID IN MONTH' : 'PAID')
-                              : (isMonthly ? 'UNPAID' : 'PENDING'),
+                              : (isMonthly ? 'UNPAID' : 'UNPAID'),
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
@@ -699,7 +1048,9 @@ class _ReportsViewState extends State<ReportsView> {
                   InkWell(
                     onTap: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const AddCollectionView()),
+                        MaterialPageRoute(
+                          builder: (_) => AddCollectionView(initialFlat: flat),
+                        ),
                       );
                     },
                     borderRadius: BorderRadius.circular(6),

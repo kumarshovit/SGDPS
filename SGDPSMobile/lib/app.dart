@@ -5,7 +5,7 @@ import 'core/constants/colors.dart';
 import 'providers/auth_provider.dart';
 import 'providers/collection_provider.dart';
 import 'providers/flat_provider.dart';
-import 'views/auth/login_view.dart';
+import 'views/splash/splash_view.dart';
 
 class SgdpsMobileApp extends StatelessWidget {
   const SgdpsMobileApp({Key? key}) : super(key: key);
@@ -42,7 +42,7 @@ class SgdpsMobileApp extends StatelessWidget {
             elevation: 0,
           ),
         ),
-        home: const LoginView(),
+        home: const SplashView(),
       ),
     );
   }
