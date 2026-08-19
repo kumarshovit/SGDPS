@@ -23,7 +23,7 @@ import {
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
-import { useGetFlatsQuery, useCreateBlockMutation } from '../../features/flats/api/flatApiSlice';
+import { useGetFlatsQuery, useCreateBlockMutation, useToggleBlockStatusMutation } from '../../features/flats/api/flatApiSlice';
 import {
   getSponsorshipCategories,
   saveSponsorshipCategories,
@@ -71,10 +71,11 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const { data: flats = [] } = useGetFlatsQuery();
   const [createBlock] = useCreateBlockMutation();
+  const [toggleBlockStatus] = useToggleBlockStatusMutation();
 
   // Existing blocks from DB
   const existingBlocks = useMemo(() => {
-    const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+    const fromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     if (fromFlats.length > 0) return fromFlats;
     return ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
   }, [flats]);
@@ -82,8 +83,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   // Sync settings whenever modal opens
   useEffect(() => {
     if (showSettings) {
-      const fromFlats = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
-      setActiveBlocksList(getActiveBlocks(fromFlats));
+      const activeFromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
+      setActiveBlocksList(getActiveBlocks(activeFromFlats));
       setDeletePin(getDeletePin());
       setFloorsPerBlock(getGlobalFloorsPerBlock());
       setFlatsPerFloor(getGlobalFlatsPerFloor());
@@ -163,9 +164,31 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       // 3. Save Sponsorship Categories
       saveSponsorshipCategories(categories);
 
-      // 4. Provision any newly queued blocks into the backend DB
-      if (pendingNewBlocks.length > 0) {
-        for (const blockName of pendingNewBlocks) {
+      // 4. Synchronize block active/inactive status in central DB
+      const allDbBlocks = Array.from(new Set(flats.map((f) => f.block).filter(Boolean)));
+
+      // Deactivate any DB blocks not in finalBlocks
+      const blocksToDeactivate = allDbBlocks.filter(
+        (b) => !finalBlocks.some((fb) => fb.toLowerCase() === b.toLowerCase())
+      );
+      for (const blockName of blocksToDeactivate) {
+        try {
+          await toggleBlockStatus({ blockName, isActive: false }).unwrap();
+        } catch {
+          // continue
+        }
+      }
+
+      // Activate or Provision blocks in finalBlocks
+      for (const blockName of finalBlocks) {
+        const existsInDb = allDbBlocks.some((b) => b.toLowerCase() === blockName.toLowerCase());
+        if (existsInDb) {
+          try {
+            await toggleBlockStatus({ blockName, isActive: true }).unwrap();
+          } catch {
+            // continue
+          }
+        } else {
           await createBlock({
             blockName,
             floors: floorsPerBlock > 0 ? floorsPerBlock : 9,
