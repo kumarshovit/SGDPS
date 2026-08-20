@@ -10,6 +10,147 @@ export const exportToExcel = (data: any[], fileName: string, sheetName: string =
   XLSX.writeFile(wb, `${fileName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 };
 
+export interface ExcelSheetData {
+  sheetName: string;
+  data: any[];
+}
+
+export const exportMultiSheetExcel = (
+  sheets: ExcelSheetData[],
+  fileName: string
+) => {
+  const wb = XLSX.utils.book_new();
+  for (const s of sheets) {
+    const ws = XLSX.utils.json_to_sheet(s.data);
+    XLSX.utils.book_append_sheet(wb, ws, s.sheetName.slice(0, 31));
+  }
+  XLSX.writeFile(wb, `${fileName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+};
+
+export interface PdfTableSection {
+  title?: string;
+  subtitle?: string;
+  headers: string[];
+  rows: (string | number)[][];
+  footRows?: any[][];
+  columnStyles?: Record<number, any>;
+}
+
+export const exportMultiTablePdf = (
+  mainTitle: string,
+  mainSubtitle: string,
+  sections: PdfTableSection[],
+  fileName: string
+) => {
+  const doc = new jsPDF();
+
+  // Header with maroon brand color
+  doc.setFillColor(124, 31, 46); // #7C1F2E
+  doc.rect(0, 0, 210, 24, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(255, 255, 255);
+  doc.text('SGDPS - Society & Puja Financial Ledger', 14, 14);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Audit Date: ${new Date().toLocaleString('en-IN')}`, 14, 20);
+
+  // Main Title & Subtitle
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(43, 26, 20); // #2B1A14
+  doc.text(mainTitle, 14, 33);
+
+  let currentY = 37;
+  if (mainSubtitle) {
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(124, 31, 46); // #7C1F2E
+    doc.text(mainSubtitle, 14, 39);
+    currentY = 44;
+  }
+
+  for (let i = 0; i < sections.length; i++) {
+    const sec = sections[i];
+
+    if (sec.title) {
+      if (currentY > 250) {
+        doc.addPage();
+        currentY = 20;
+      }
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(124, 31, 46);
+      doc.text(sec.title, 14, currentY);
+      currentY += 5;
+
+      if (sec.subtitle) {
+        doc.setFontSize(8.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        doc.text(sec.subtitle, 14, currentY);
+        currentY += 5;
+      }
+    }
+
+    const columnStyles: Record<number, any> = sec.columnStyles || {};
+    sec.headers.forEach((h, idx) => {
+      const lower = h.toLowerCase();
+      if (
+        lower.includes('amount') ||
+        lower.includes('rs') ||
+        lower.includes('total') ||
+        lower.includes('cash') ||
+        lower.includes('upi') ||
+        lower.includes('cheque') ||
+        lower.includes('bank')
+      ) {
+        if (!columnStyles[idx]) {
+          columnStyles[idx] = { halign: 'right' };
+        }
+      }
+    });
+
+    autoTable(doc, {
+      startY: currentY,
+      head: [sec.headers],
+      body: sec.rows,
+      foot: sec.footRows && sec.footRows.length > 0 ? sec.footRows : undefined,
+      theme: 'grid',
+      margin: { left: 14, right: 14 },
+      headStyles: {
+        fillColor: [124, 31, 46],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 8,
+        halign: 'left',
+      },
+      footStyles: {
+        fillColor: [245, 235, 220],
+        textColor: [124, 31, 46],
+        fontStyle: 'bold',
+        fontSize: 8.5,
+      },
+      styles: {
+        fontSize: 7.5,
+        cellPadding: 2,
+        overflow: 'linebreak',
+        textColor: [43, 26, 20],
+      },
+      alternateRowStyles: {
+        fillColor: [253, 248, 240],
+      },
+      columnStyles,
+    });
+
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+  }
+
+  doc.save(`${fileName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+};
+
 export const exportToPdf = (
   title: string,
   headers: string[],

@@ -37,6 +37,8 @@ import {
 import {
   exportToExcel,
   exportToPdf,
+  exportMultiSheetExcel,
+  exportMultiTablePdf,
   exportDefaultersToExcel,
   exportFinancialStatementPDF,
   exportCategoryExpensesToExcel,
@@ -272,21 +274,25 @@ export const ReportsPage: React.FC = () => {
       .sort((a, b) => b.total - a.total);
   }, [filteredExpenses, periodExpenseTotal]);
 
-  // Unique Lists for Dropdown Options
+  // Available Filter Options derived from data
   const availableCategories = useMemo(() => {
-    const set = new Set(expenses.map((e) => e.category).filter(Boolean));
+    const set = new Set<string>();
+    for (const e of expenses) {
+      if (e.category) set.add(e.category);
+    }
     return ['ALL', ...Array.from(set)];
   }, [expenses]);
 
   const availableBlocks = useMemo(() => {
-    const fromActiveFlats = Array.from(
-      new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean))
-    );
-    if (fromActiveFlats.length > 0) {
-      return ['ALL', ...fromActiveFlats];
+    const set = new Set<string>();
+    for (const f of flats) {
+      if (f.block) set.add(f.block);
     }
-    return ['ALL', 'A-Block', 'B-Block', 'C-Block', 'D-Block'];
-  }, [flats]);
+    for (const c of collections) {
+      if (c.block) set.add(c.block);
+    }
+    return ['ALL', ...Array.from(set).sort()];
+  }, [flats, collections]);
 
   const availableCollectors = useMemo(() => {
     const set = new Set<string>();
@@ -311,6 +317,8 @@ export const ReportsPage: React.FC = () => {
         count: number;
         cashAmount: number;
         upiAmount: number;
+        chequeAmount: number;
+        bankAmount: number;
         otherAmount: number;
         lastCollectionDate?: string;
       }
@@ -326,6 +334,8 @@ export const ReportsPage: React.FC = () => {
         count: 0,
         cashAmount: 0,
         upiAmount: 0,
+        chequeAmount: 0,
+        bankAmount: 0,
         otherAmount: 0,
       };
     }
@@ -340,13 +350,18 @@ export const ReportsPage: React.FC = () => {
           count: 0,
           cashAmount: 0,
           upiAmount: 0,
+          chequeAmount: 0,
+          bankAmount: 0,
           otherAmount: 0,
         };
       }
       map[name].totalAmount += c.amount || 0;
       map[name].count += 1;
-      if (c.mode === 'Cash') map[name].cashAmount += c.amount || 0;
-      else if (c.mode === 'UPI') map[name].upiAmount += c.amount || 0;
+      const mode = (c.mode || '').toLowerCase().replace(/[\s_-]/g, '');
+      if (mode.includes('cash')) map[name].cashAmount += c.amount || 0;
+      else if (mode.includes('upi')) map[name].upiAmount += c.amount || 0;
+      else if (mode.includes('cheque')) map[name].chequeAmount += c.amount || 0;
+      else if (mode.includes('bank')) map[name].bankAmount += c.amount || 0;
       else map[name].otherAmount += c.amount || 0;
 
       if (
@@ -378,6 +393,14 @@ export const ReportsPage: React.FC = () => {
   );
   const totalCollectorUpi = useMemo(
     () => collectorStats.reduce((s, c) => s + c.upiAmount, 0),
+    [collectorStats]
+  );
+  const totalCollectorCheque = useMemo(
+    () => collectorStats.reduce((s, c) => s + c.chequeAmount, 0),
+    [collectorStats]
+  );
+  const totalCollectorBank = useMemo(
+    () => collectorStats.reduce((s, c) => s + c.bankAmount, 0),
     [collectorStats]
   );
 
@@ -506,55 +529,131 @@ export const ReportsPage: React.FC = () => {
           footRows
         );
       } else if (reportType === 'collector_report') {
-        const rows = collectorStats.map((c) => [
+        const summaryRows = collectorStats.map((c) => [
           c.name,
           `${c.count} receipts`,
           formatPdfCurrency(c.cashAmount),
           formatPdfCurrency(c.upiAmount),
+          formatPdfCurrency(c.chequeAmount),
+          formatPdfCurrency(c.bankAmount),
           formatPdfCurrency(c.totalAmount),
           periodCollectionTotal > 0 ? `${Math.round((c.totalAmount / periodCollectionTotal) * 100)}%` : '0%',
         ]);
-        const footRows = [
+        const summaryFootRows = [
           [
             { content: 'Total Field Collections', styles: { halign: 'left', fontStyle: 'bold' } },
             { content: `${filteredCollections.length} receipts`, styles: { halign: 'center', fontStyle: 'bold' } },
-            { content: formatPdfCurrency(filteredCollections.filter((c) => c.mode === 'Cash').reduce((s, c) => s + c.amount, 0)), styles: { halign: 'right', fontStyle: 'bold' } },
-            { content: formatPdfCurrency(filteredCollections.filter((c) => c.mode === 'UPI').reduce((s, c) => s + c.amount, 0)), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(totalCollectorCash), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(totalCollectorUpi), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(totalCollectorCheque), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(totalCollectorBank), styles: { halign: 'right', fontStyle: 'bold' } },
             { content: formatPdfCurrency(periodCollectionTotal), styles: { halign: 'right', fontStyle: 'bold' } },
             { content: '100%', styles: { halign: 'right', fontStyle: 'bold' } },
           ],
         ];
-        exportToPdf(
-          `Collector Performance & Audit Statement (${dateLabel})`,
-          ['Collector Name', 'Receipts', 'Cash (Rs.)', 'UPI (Rs.)', 'Total (Rs.)', 'Share'],
-          rows,
-          `SGDPS_Collector_Report_${datePreset}`,
-          `Total Field Collection: ${formatPdfCurrency(periodCollectionTotal)} across ${collectorStats.length} Collectors`,
-          footRows
+
+        const detailRows = filteredCollections.map((c) => [
+          c.receiptNumber || `REC-${c.id}`,
+          formatDateTime(c.collectionDateTime),
+          c.collectedByName || 'Direct/Admin',
+          c.donorResidentName || 'Resident',
+          c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation'),
+          c.mode,
+          c.transactionReference || '—',
+          formatPdfCurrency(c.amount),
+        ]);
+
+        const detailFootRows = [
+          [
+            { content: `Total (${filteredCollections.length} receipts)`, colSpan: 7, styles: { halign: 'left', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(periodCollectionTotal), styles: { halign: 'right', fontStyle: 'bold' } },
+          ],
+        ];
+
+        exportMultiTablePdf(
+          `Field Collector Performance & Detailed Audit Report`,
+          `Period: ${dateLabel} | Total Collections: ${formatPdfCurrency(periodCollectionTotal)} across ${filteredCollections.length} receipts`,
+          [
+            {
+              title: '1. Collector Performance Summary',
+              subtitle: `Breakdown by collector across Cash, UPI, Cheque, and Bank Transfer`,
+              headers: ['Collector Name', 'Receipts', 'Cash (Rs.)', 'UPI (Rs.)', 'Cheque (Rs.)', 'Bank (Rs.)', 'Total (Rs.)', 'Share'],
+              rows: summaryRows,
+              footRows: summaryFootRows,
+            },
+            {
+              title: '2. Detailed Receipts Ledger',
+              subtitle: `Complete itemized collection entries recorded for selected criteria`,
+              headers: ['Receipt #', 'Date & Time', 'Collector', 'Resident / Contributor', 'Unit / Purpose', 'Mode', 'Ref / Cheque #', 'Amount (Rs.)'],
+              rows: detailRows,
+              footRows: detailFootRows,
+            },
+          ],
+          `SGDPS_Collector_Report_${datePreset}`
         );
       }
     } else {
       // Excel Export
       if (reportType === 'collector_report') {
-        const data: any[] = collectorStats.map((c) => ({
+        const summaryData: any[] = collectorStats.map((c) => ({
           'Collector Name': c.name,
           'Receipts Count': c.count,
           'Cash Collected (Rs)': c.cashAmount,
-          'UPI / Online Collected (Rs)': c.upiAmount,
+          'UPI Collected (Rs)': c.upiAmount,
+          'Cheque Collected (Rs)': c.chequeAmount,
+          'Bank Transfer Collected (Rs)': c.bankAmount,
           'Total Collected (Rs)': c.totalAmount,
           'Collection Share (%)': periodCollectionTotal > 0 ? `${Math.round((c.totalAmount / periodCollectionTotal) * 100)}%` : '0%',
           'Last Active': c.lastCollectionDate ? formatDateTime(c.lastCollectionDate) : '—',
         }));
-        data.push({
+        summaryData.push({
           'Collector Name': 'TOTAL',
           'Receipts Count': filteredCollections.length,
-          'Cash Collected (Rs)': filteredCollections.filter((c) => c.mode === 'Cash').reduce((s, c) => s + c.amount, 0),
-          'UPI / Online Collected (Rs)': filteredCollections.filter((c) => c.mode === 'UPI').reduce((s, c) => s + c.amount, 0),
+          'Cash Collected (Rs)': totalCollectorCash,
+          'UPI Collected (Rs)': totalCollectorUpi,
+          'Cheque Collected (Rs)': totalCollectorCheque,
+          'Bank Transfer Collected (Rs)': totalCollectorBank,
           'Total Collected (Rs)': periodCollectionTotal,
           'Collection Share (%)': '100%',
           'Last Active': '',
         });
-        exportToExcel(data, `SGDPS_Collector_Report_${datePreset}`);
+
+        const detailData: any[] = filteredCollections.map((c) => ({
+          'Receipt Number': c.receiptNumber || `REC-${c.id}`,
+          'Date & Time': formatDateTime(c.collectionDateTime),
+          'Collector Name': c.collectedByName || 'Direct/Admin',
+          'Resident / Contributor': c.donorResidentName || 'Resident',
+          'Tower / Block': c.block || '—',
+          'Flat Number': c.flatNumber || '—',
+          'Collection Type': c.type === 'ResidentBlock' ? 'Resident Block' : 'Sponsorship / Other',
+          'Purpose / Category': c.type === 'ResidentBlock' ? `Flat ${c.block}-${c.flatNumber}` : (c.category || 'Donation'),
+          'Payment Mode': c.mode,
+          'Amount (Rs)': c.amount,
+          'Transaction Ref / Cheque No': c.transactionReference || '',
+          'Remarks': c.remarks || '',
+        }));
+        detailData.push({
+          'Receipt Number': 'TOTAL',
+          'Date & Time': '',
+          'Collector Name': '',
+          'Resident / Contributor': '',
+          'Tower / Block': '',
+          'Flat Number': '',
+          'Collection Type': '',
+          'Purpose / Category': `${filteredCollections.length} entries`,
+          'Payment Mode': '',
+          'Amount (Rs)': periodCollectionTotal,
+          'Transaction Ref / Cheque No': '',
+          'Remarks': '',
+        });
+
+        exportMultiSheetExcel(
+          [
+            { sheetName: 'Collector Summary', data: summaryData },
+            { sheetName: 'Detailed Receipts Ledger', data: detailData },
+          ],
+          `SGDPS_Collector_Report_${datePreset}`
+        );
       } else if (reportType === 'category_expenses') {
         exportCategoryExpensesToExcel(categoryStats);
       } else if (reportType === 'date_wise_expenses') {
@@ -1177,7 +1276,7 @@ export const ReportsPage: React.FC = () => {
             subtitle={`Showing ${collectorStats.length} collectors with ${totalCollectorReceipts} receipts totaling ${formatCurrency(totalCollectorAmount)}`}
           >
             {/* Quick Metrics Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5 p-3 rounded-2xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-5 p-3 rounded-2xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
               <div>
                 <span className="text-charcoal-400 font-medium">Active Collectors:</span>
                 <div className="text-base font-extrabold text-charcoal-900 dark:text-cream-50">{collectorStats.length}</div>
@@ -1187,12 +1286,20 @@ export const ReportsPage: React.FC = () => {
                 <div className="text-base font-extrabold text-leaf-600 dark:text-leaf-400">{formatCurrency(totalCollectorAmount)}</div>
               </div>
               <div>
-                <span className="text-saffron-600 dark:text-gold-400 font-medium">Cash Collected:</span>
+                <span className="text-saffron-600 dark:text-gold-400 font-medium">💵 Cash:</span>
                 <div className="text-base font-extrabold text-saffron-700 dark:text-gold-400">{formatCurrency(totalCollectorCash)}</div>
               </div>
               <div>
-                <span className="text-indigo-600 dark:text-indigo-400 font-medium">UPI / Online:</span>
+                <span className="text-indigo-600 dark:text-indigo-400 font-medium">📱 UPI:</span>
                 <div className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalCollectorUpi)}</div>
+              </div>
+              <div>
+                <span className="text-purple-600 dark:text-purple-400 font-medium">📑 Cheque:</span>
+                <div className="text-base font-extrabold text-purple-600 dark:text-purple-400">{formatCurrency(totalCollectorCheque)}</div>
+              </div>
+              <div>
+                <span className="text-sky-600 dark:text-sky-400 font-medium">🏦 Bank Transfer:</span>
+                <div className="text-base font-extrabold text-sky-600 dark:text-sky-400">{formatCurrency(totalCollectorBank)}</div>
               </div>
               <div>
                 <span className="text-charcoal-400 font-medium">Total Receipts:</span>
@@ -1206,13 +1313,15 @@ export const ReportsPage: React.FC = () => {
               <div className="text-xs text-charcoal-400 py-12 text-center">No collector activity found for this period.</div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[700px]">
+                <table className="w-full text-left border-collapse min-w-[850px]">
                   <thead>
                     <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
                       <th className="py-3 px-3">Collector Name</th>
                       <th className="py-3 px-3 text-center">Receipts</th>
                       <th className="py-3 px-3 text-right">Cash (₹)</th>
-                      <th className="py-3 px-3 text-right">UPI / Bank (₹)</th>
+                      <th className="py-3 px-3 text-right">UPI (₹)</th>
+                      <th className="py-3 px-3 text-right">Cheque (₹)</th>
+                      <th className="py-3 px-3 text-right">Bank (₹)</th>
                       <th className="py-3 px-3 text-right">Total (₹)</th>
                       <th className="py-3 px-3 text-right">Share (%)</th>
                       <th className="py-3 px-3 text-center">Last Active</th>
@@ -1254,6 +1363,14 @@ export const ReportsPage: React.FC = () => {
                             {c.upiAmount > 0 ? formatCurrency(c.upiAmount) : '—'}
                           </td>
 
+                          <td className="py-3.5 px-3 text-right font-mono text-charcoal-700 dark:text-cream-200">
+                            {c.chequeAmount > 0 ? formatCurrency(c.chequeAmount) : '—'}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right font-mono text-charcoal-700 dark:text-cream-200">
+                            {c.bankAmount > 0 ? formatCurrency(c.bankAmount) : '—'}
+                          </td>
+
                           <td className="py-3.5 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
                             {formatCurrency(c.totalAmount)}
                           </td>
@@ -1293,6 +1410,12 @@ export const ReportsPage: React.FC = () => {
                       <td className="py-3 px-3 text-right font-bold font-mono">
                         {formatCurrency(totalCollectorUpi)}
                       </td>
+                      <td className="py-3 px-3 text-right font-bold font-mono">
+                        {formatCurrency(totalCollectorCheque)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold font-mono">
+                        {formatCurrency(totalCollectorBank)}
+                      </td>
                       <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
                         +{formatCurrency(totalCollectorAmount)}
                       </td>
@@ -1305,59 +1428,96 @@ export const ReportsPage: React.FC = () => {
             )}
           </GlassCard>
 
-          {/* Individual Receipts Breakdown when a specific collector is filtered */}
-          {selectedCollector !== 'ALL' && (
-            <GlassCard
-              title={`Receipts Ledger for ${selectedCollector} (${filteredCollections.length} entries)`}
-              subtitle={`Detailed collection list submitted by ${selectedCollector}`}
-            >
-              {filteredCollections.length === 0 ? (
-                <div className="text-xs text-charcoal-400 py-8 text-center">No receipts recorded by this collector for the selected period.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[650px]">
-                    <thead>
-                      <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                        <th className="py-3 px-3">Receipt #</th>
-                        <th className="py-3 px-3">Date</th>
-                        <th className="py-3 px-3">Resident / Donor</th>
-                        <th className="py-3 px-3">Flat / Category</th>
-                        <th className="py-3 px-3">Mode</th>
-                        <th className="py-3 px-3 text-right">Amount (₹)</th>
+          {/* Detailed Receipts Ledger for the selected filter / collector */}
+          <GlassCard
+            title={
+              selectedCollector !== 'ALL'
+                ? `Receipts Ledger for ${selectedCollector} (${filteredCollections.length} entries)`
+                : `All Collectors Detailed Receipts Ledger (${filteredCollections.length} entries)`
+            }
+            subtitle={
+              selectedCollector !== 'ALL'
+                ? `Itemized collection transactions submitted by ${selectedCollector}`
+                : `Complete itemized collection entries across all collectors for this period`
+            }
+          >
+            {filteredCollections.length === 0 ? (
+              <div className="text-xs text-charcoal-400 py-8 text-center">No receipts recorded for the selected filter criteria.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[750px]">
+                  <thead>
+                    <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                      <th className="py-3 px-3">Receipt #</th>
+                      <th className="py-3 px-3">Date & Time</th>
+                      <th className="py-3 px-3">Collector</th>
+                      <th className="py-3 px-3">Resident / Contributor</th>
+                      <th className="py-3 px-3">Unit / Purpose</th>
+                      <th className="py-3 px-3">Mode</th>
+                      <th className="py-3 px-3">Ref / Cheque #</th>
+                      <th className="py-3 px-3 text-right">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                    {filteredCollections.map((c) => (
+                      <tr
+                        key={c.id}
+                        className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                      >
+                        <td className="py-3 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
+                          {c.receiptNumber || `REC-${c.id}`}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
+                          {formatDateTime(c.collectionDateTime)}
+                        </td>
+                        <td className="py-3 px-3 font-medium text-charcoal-800 dark:text-cream-100">
+                          {c.collectedByName || 'Direct/Admin'}
+                        </td>
+                        <td className="py-3 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                          {c.donorResidentName || 'Resident'}
+                        </td>
+                        <td className="py-3 px-3 text-charcoal-700 dark:text-charcoal-300">
+                          {c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation')}
+                        </td>
+                        <td className="py-3 px-3">
+                          <Badge
+                            variant={
+                              c.mode === 'Cash'
+                                ? 'cash'
+                                : c.mode === 'UPI'
+                                ? 'upi'
+                                : c.mode === 'Cheque'
+                                ? 'cheque'
+                                : 'bank'
+                            }
+                            size="sm"
+                          >
+                            {c.mode}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-charcoal-500 dark:text-charcoal-400">
+                          {c.transactionReference || '—'}
+                        </td>
+                        <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                          {formatCurrency(c.amount)}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                      {filteredCollections.map((c) => (
-                        <tr
-                          key={c.id}
-                          className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
-                        >
-                          <td className="py-3 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
-                            {c.receiptNumber || `REC-${c.id}`}
-                          </td>
-                          <td className="py-3 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
-                            {formatDateTime(c.collectionDateTime)}
-                          </td>
-                          <td className="py-3 px-3 font-bold text-charcoal-900 dark:text-cream-50">
-                            {c.donorResidentName || 'Resident'}
-                          </td>
-                          <td className="py-3 px-3 text-charcoal-700 dark:text-charcoal-300">
-                            {c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation')}
-                          </td>
-                          <td className="py-3 px-3">
-                            <Badge variant="neutral" size="sm">{c.mode}</Badge>
-                          </td>
-                          <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono">
-                            {formatCurrency(c.amount)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </GlassCard>
-          )}
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-cream-50/80 dark:bg-charcoal-900/80 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
+                      <td colSpan={7} className="py-3 px-3 text-charcoal-900 dark:text-cream-50 font-bold">
+                        Total ({filteredCollections.length} entries)
+                      </td>
+                      <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                        +{formatCurrency(periodCollectionTotal)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </GlassCard>
         </div>
       )}
     </div>
