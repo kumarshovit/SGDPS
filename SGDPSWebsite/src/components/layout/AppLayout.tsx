@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { useAppSelector } from '../../hooks/useAppSelector';
+import { useAppDispatch } from '../../hooks/useAppDispatch';
+import { baseApi } from '../../app/api/baseApi';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { clsx } from 'clsx';
@@ -9,6 +11,23 @@ export const AppLayout: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const location = useLocation();
+  const dispatch = useAppDispatch();
+
+  // Auto-reload data across all screens when switching routes / pages
+  useEffect(() => {
+    dispatch(
+      baseApi.util.invalidateTags([
+        'Dashboard',
+        'Collections',
+        'Flats',
+        'Blocks',
+        'BlockGrid',
+        'Expenses',
+        'Reports',
+        'Users',
+      ])
+    );
+  }, [location.pathname, dispatch]);
 
   const { isAuthenticated, token, user } = useAppSelector((state) => state.auth);
   const storedToken = localStorage.getItem('sgdps_token');

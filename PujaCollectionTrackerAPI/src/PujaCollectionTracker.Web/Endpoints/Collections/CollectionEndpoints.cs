@@ -1,5 +1,6 @@
 using PujaCollectionTracker.Core.CollectionAggregate;
 using PujaCollectionTracker.Core.FlatAggregate;
+using PujaCollectionTracker.Core.IdentityAggregate;
 using PujaCollectionTracker.Infrastructure.Data;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -231,6 +232,36 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
 
     if (req.Amount <= 0)
       return TypedResults.Problem(detail: "Collection amount must be greater than 0", statusCode: 400);
+
+    // Verify that the collector account is active
+    if (!string.IsNullOrWhiteSpace(req.CollectedByUserId) && int.TryParse(req.CollectedByUserId, out var uid))
+    {
+      var collectorUser = await db.Users.FindAsync([UserId.From(uid)], ct);
+      if (collectorUser != null && !collectorUser.IsActive)
+      {
+        return TypedResults.Problem(
+          detail: "Your collector account has been deactivated by Admin. You cannot record new collections. Please contact the society office.",
+          statusCode: 403);
+      }
+    }
+    else if (!string.IsNullOrWhiteSpace(req.CollectedByName))
+    {
+      var cleanName = req.CollectedByName.Trim().ToLowerInvariant();
+      if (cleanName != "admin")
+      {
+        var collectorUser = await db.Users.FirstOrDefaultAsync(u =>
+          u.Email.ToLower() == cleanName ||
+          (u.FirstName + " " + u.LastName).Trim().ToLower() == cleanName ||
+          u.FirstName.ToLower() == cleanName, ct);
+
+        if (collectorUser != null && !collectorUser.IsActive)
+        {
+          return TypedResults.Problem(
+            detail: "Your collector account has been deactivated by Admin. You cannot record new collections. Please contact the society office.",
+            statusCode: 403);
+        }
+      }
+    }
 
     var type = Enum.TryParse<CollectionType>(req.Type, true, out var parsedType) ? parsedType : CollectionType.ResidentBlock;
     var mode = Enum.TryParse<PaymentMode>(req.Mode, true, out var parsedMode) ? parsedMode : PaymentMode.Cash;

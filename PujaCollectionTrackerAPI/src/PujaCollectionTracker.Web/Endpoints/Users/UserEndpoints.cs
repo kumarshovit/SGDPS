@@ -264,37 +264,15 @@ public class DeleteUserEndpoint(AppDbContext db) : EndpointWithoutRequest<Result
   {
     var id = Route<int>("id");
     var userId = UserId.From(id);
-    var user = await db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == userId, ct);
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
     if (user == null)
       return TypedResults.NotFound();
 
-    var idStr = id.ToString();
-    var email = user.Email.Trim().ToLower();
-    var fullName = $"{user.FirstName} {user.LastName}".Trim().ToLower();
-    var firstName = user.FirstName.Trim().ToLower();
-
-    var hasCollections = await db.PaymentCollections.AnyAsync(c =>
-      c.CollectedByUserId == idStr ||
-      (c.CollectedByUserId != null && c.CollectedByUserId.ToLower() == email) ||
-      (!string.IsNullOrWhiteSpace(c.CollectedByName) && (
-        c.CollectedByName.Trim().ToLower() == email ||
-        c.CollectedByName.Trim().ToLower() == fullName ||
-        c.CollectedByName.Trim().ToLower() == firstName
-      )), ct);
-
-    if (hasCollections)
-    {
-      user.Deactivate();
-      user.RevokeRefreshToken();
-      await db.SaveChangesAsync(ct);
-      return TypedResults.Ok($"Collector '{user.FirstName} {user.LastName}' has recorded collections. The account has been deactivated and mobile access revoked to protect financial audit history.");
-    }
-
-    db.UserRoles.RemoveRange(user.UserRoles);
-    db.Users.Remove(user);
+    user.Deactivate();
+    user.RevokeRefreshToken();
     await db.SaveChangesAsync(ct);
 
-    return TypedResults.Ok($"Successfully deleted collector '{user.FirstName} {user.LastName}'.");
+    return TypedResults.Ok($"Collector '{user.FirstName} {user.LastName}' has been soft-deleted and deactivated. Mobile access and collection permissions have been revoked.");
   }
 }
 

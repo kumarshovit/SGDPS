@@ -74,8 +74,14 @@ class _AddCollectionViewState extends State<AddCollectionView> {
       await flatProvider.fetchFlats();
 
       if (mounted) {
-        if (widget.initialFlat != null && widget.initialFlat!.isActive) {
-          _applySelectedFlat(widget.initialFlat!);
+        if (widget.initialFlat != null) {
+          final matched = flatProvider.activeFlats.cast<FlatModel?>().firstWhere(
+                (f) => f != null && (f.id == widget.initialFlat!.id || (f.block == widget.initialFlat!.block && f.flatNumber == widget.initialFlat!.flatNumber)),
+                orElse: () => widget.initialFlat,
+              );
+          if (matched != null) {
+            _applySelectedFlat(matched);
+          }
         }
       }
     });
@@ -202,13 +208,44 @@ class _AddCollectionViewState extends State<AddCollectionView> {
         MaterialPageRoute(builder: (_) => ReceiptView(collection: receipt)),
       );
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(collectionProvider.errorMessage ?? 'Failed to record collection. Please check connection.'),
-          backgroundColor: Colors.red.shade700,
-          duration: const Duration(seconds: 4),
-        ),
-      );
+      final error = collectionProvider.errorMessage ?? 'Failed to record collection. Please check connection.';
+      final isDeactivated = error.toLowerCase().contains('deactivated') ||
+          error.toLowerCase().contains('inactive') ||
+          error.toLowerCase().contains('revoked');
+
+      if (isDeactivated) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red),
+                SizedBox(width: 8),
+                Text('Account Inactive', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            content: Text(error),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  await auth.logout();
+                },
+                child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error),
+            backgroundColor: Colors.red.shade700,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -391,7 +428,9 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                       child: _buildDropdownContainer(
                         label: 'Flat #',
                         child: DropdownButton<FlatModel>(
-                          value: _selectedFlat != null && availableFlats.contains(_selectedFlat) ? _selectedFlat : null,
+                          value: availableFlats.any((f) => f == _selectedFlat)
+                              ? availableFlats.firstWhere((f) => f == _selectedFlat)
+                              : null,
                           isExpanded: true,
                           underline: const SizedBox(),
                           icon: const Icon(Icons.arrow_drop_down, color: AppColors.goldDark),

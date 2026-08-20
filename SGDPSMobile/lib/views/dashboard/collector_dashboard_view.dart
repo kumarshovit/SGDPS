@@ -20,7 +20,7 @@ class CollectorDashboardView extends StatefulWidget {
   State<CollectorDashboardView> createState() => _CollectorDashboardViewState();
 }
 
-class _CollectorDashboardViewState extends State<CollectorDashboardView> {
+class _CollectorDashboardViewState extends State<CollectorDashboardView> with WidgetsBindingObserver {
   // Unified Filter State for the entire Dashboard
   DatePreset _datePreset = DatePreset.today;
   DateTimeRange? _customDateRange;
@@ -29,12 +29,30 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadData();
+    }
+  }
+
   Future<void> _loadData() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isActive = await auth.verifyAccountStatus();
+    if (!isActive || !mounted) return;
+
     await Future.wait([
       Provider.of<CollectionProvider>(context, listen: false)
           .fetchCollections(),
@@ -518,10 +536,13 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
           IconButton(
             icon: const Icon(Icons.assessment_outlined, color: AppColors.gold),
             tooltip: 'Collection Reports',
-            onPressed: () {
-              Navigator.of(context).push(
+            onPressed: () async {
+              await Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ReportsView()),
               );
+              if (mounted) {
+                _loadData();
+              }
             },
           ),
           IconButton(
@@ -802,11 +823,14 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> {
                     ],
                   ),
                   ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
+                    onPressed: () async {
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
                             builder: (_) => const AddCollectionView()),
                       );
+                      if (mounted) {
+                        _loadData();
+                      }
                     },
                     icon: const Icon(Icons.add_circle,
                         color: Colors.white, size: 18),

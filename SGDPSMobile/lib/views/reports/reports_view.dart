@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/colors.dart';
 import '../../models/collection_model.dart';
 import '../../models/flat_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/collection_provider.dart';
 import '../../providers/flat_provider.dart';
 import '../collection/add_collection_view.dart';
@@ -18,7 +19,7 @@ class ReportsView extends StatefulWidget {
   State<ReportsView> createState() => _ReportsViewState();
 }
 
-class _ReportsViewState extends State<ReportsView> {
+class _ReportsViewState extends State<ReportsView> with WidgetsBindingObserver {
   ReportPeriod _period = ReportPeriod.overall;
   DateTime _customMonthDate = DateTime.now();
 
@@ -46,12 +47,30 @@ class _ReportsViewState extends State<ReportsView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadData();
+    }
+  }
+
   Future<void> _loadData() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isActive = await auth.verifyAccountStatus();
+    if (!isActive || !mounted) return;
+
     await Future.wait([
       Provider.of<FlatProvider>(context, listen: false).fetchFlats(),
       Provider.of<CollectionProvider>(context, listen: false)
@@ -112,7 +131,7 @@ class _ReportsViewState extends State<ReportsView> {
     final flatProvider = Provider.of<FlatProvider>(context);
     final collectionProvider = Provider.of<CollectionProvider>(context);
 
-    final flats = flatProvider.flats;
+    final flats = flatProvider.activeFlats;
     final allCollections = collectionProvider.collections;
     final isLoading = flatProvider.isLoading || collectionProvider.isLoading;
 
@@ -851,11 +870,14 @@ class _ReportsViewState extends State<ReportsView> {
             ),
             const SizedBox(height: 4),
             InkWell(
-              onTap: () {
-                Navigator.of(context).push(
+              onTap: () async {
+                await Navigator.of(context).push(
                   MaterialPageRoute(
                       builder: (_) => ReceiptView(collection: item)),
                 );
+                if (mounted) {
+                  _loadData();
+                }
               },
               child: const Text(
                 'Receipt >',
@@ -1169,12 +1191,15 @@ class _ReportsViewState extends State<ReportsView> {
                 const SizedBox(height: 4),
                 if (!isPaid)
                   InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(
+                    onTap: () async {
+                      await Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => AddCollectionView(initialFlat: flat),
                         ),
                       );
+                      if (mounted) {
+                        _loadData();
+                      }
                     },
                     borderRadius: BorderRadius.circular(6),
                     child: Container(

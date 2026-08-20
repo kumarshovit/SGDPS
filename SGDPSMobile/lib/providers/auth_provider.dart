@@ -56,6 +56,34 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
+  Future<bool> verifyAccountStatus() async {
+    try {
+      final token = await StorageService.getToken();
+      if (token == null || token.isEmpty) return false;
+
+      final response = await ApiClient.get(ApiConstants.getMe);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final user = UserModel.fromJson(data);
+        if (!user.isActive) {
+          debugPrint('ACCOUNT INACTIVE: auto-logging out deactivated collector');
+          await logout();
+          return false;
+        }
+        _user = user;
+        notifyListeners();
+        return true;
+      } else if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
+        debugPrint('ACCOUNT UNAUTHORIZED/DEACTIVATED [${response.statusCode}]: logging out');
+        await logout();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('VERIFY ACCOUNT STATUS ERROR: $e');
+    }
+    return _user?.isActive ?? false;
+  }
+
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _errorMessage = null;

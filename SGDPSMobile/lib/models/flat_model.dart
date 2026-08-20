@@ -42,4 +42,14 @@ class FlatModel {
       isActive: json['isActive'] as bool? ?? true,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FlatModel &&
+          runtimeType == other.runtimeType &&
+          (id != 0 && other.id != 0 ? id == other.id : (block == other.block && flatNumber == other.flatNumber));
+
+  @override
+  int get hashCode => id != 0 ? id.hashCode : Object.hash(block, flatNumber);
 }

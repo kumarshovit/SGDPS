@@ -616,11 +616,7 @@ export const UserManagementPage: React.FC = () => {
           onConfirm={handleConfirmDeleteCollector}
           title="Delete Field Collector"
           itemName={`${collectorToDelete.fullName || collectorToDelete.firstName} (${collectorToDelete.email})`}
-          description={
-            collectorToDelete.collectionsCount && collectorToDelete.collectionsCount > 0
-              ? `This collector has recorded ${collectorToDelete.collectionsCount} collection entries. Deleting will deactivate the account and revoke mobile login access immediately to protect audit history.`
-              : `This will permanently delete collector account ${collectorToDelete.email} and revoke all access.`
-          }
+          description="Deleting will soft-delete and deactivate this collector account. Mobile app access and new collection creation permissions will be revoked immediately to protect audit history."
         />
       )}
     </div>

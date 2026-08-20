@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/colors.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/collection_provider.dart';
 import '../collection/receipt_view.dart';
 
@@ -12,16 +13,38 @@ class CollectionHistoryView extends StatefulWidget {
   State<CollectionHistoryView> createState() => _CollectionHistoryViewState();
 }
 
-class _CollectionHistoryViewState extends State<CollectionHistoryView> {
+class _CollectionHistoryViewState extends State<CollectionHistoryView> with WidgetsBindingObserver {
   String _filterMode = 'All';
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<CollectionProvider>(context, listen: false).fetchCollections();
+      _loadData();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadData();
+    }
+  }
+
+  Future<void> _loadData() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final isActive = await auth.verifyAccountStatus();
+    if (!isActive || !mounted) return;
+
+    await Provider.of<CollectionProvider>(context, listen: false).fetchCollections();
   }
 
   @override
@@ -205,10 +228,13 @@ class _CollectionHistoryViewState extends State<CollectionHistoryView> {
                               trailing: IconButton(
                                 icon: const Icon(Icons.receipt, color: AppColors.saffron, size: 20),
                                 tooltip: 'View Receipt',
-                                onPressed: () {
-                                  Navigator.of(context).push(
+                                onPressed: () async {
+                                  await Navigator.of(context).push(
                                     MaterialPageRoute(builder: (_) => ReceiptView(collection: c)),
                                   );
+                                  if (mounted) {
+                                    _loadData();
+                                  }
                                 },
                               ),
                             ),
