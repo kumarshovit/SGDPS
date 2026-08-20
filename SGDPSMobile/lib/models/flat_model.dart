@@ -9,6 +9,7 @@ class FlatModel {
   final double totalCollected;
   final double pendingAmount;
   final String paymentStatus;
+  final bool isActive;
 
   FlatModel({
     required this.id,
@@ -21,6 +22,7 @@ class FlatModel {
     required this.totalCollected,
     required this.pendingAmount,
     required this.paymentStatus,
+    this.isActive = true,
   });
 
   String get displayName => '$block · Fl $floor · Flat $flatNumber ($ownerName)';
@@ -37,6 +39,7 @@ class FlatModel {
       totalCollected: (json['totalCollected'] as num?)?.toDouble() ?? 0.0,
       pendingAmount: (json['pendingAmount'] as num?)?.toDouble() ?? 0.0,
       paymentStatus: json['paymentStatus'] as String? ?? 'Pending',
+      isActive: json['isActive'] as bool? ?? true,
     );
   }
 }

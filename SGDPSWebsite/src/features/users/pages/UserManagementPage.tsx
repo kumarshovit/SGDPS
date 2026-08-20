@@ -4,6 +4,7 @@ import {
   useCreateCollectorMutation,
   useUpdateUserNameMutation,
   useUpdateUserStatusMutation,
+  useDeleteUserMutation,
 } from '../api/userApiSlice';
 import { Collector } from '../types';
 import { formatCurrency, formatDateTime } from '../../../utils/formatters';
@@ -11,6 +12,7 @@ import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
+import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
 import { Input } from '../../../components/ui/Input';
 import {
   Users2,
@@ -29,6 +31,7 @@ import {
   Power,
   UserCheck,
   UserX,
+  Trash2,
 } from 'lucide-react';
 
 export const UserManagementPage: React.FC = () => {
@@ -52,10 +55,14 @@ export const UserManagementPage: React.FC = () => {
   const [statusConfirmCollector, setStatusConfirmCollector] = useState<Collector | null>(null);
   const [statusErrMsg, setStatusErrMsg] = useState('');
 
+  // Delete Collector Modal State
+  const [collectorToDelete, setCollectorToDelete] = useState<Collector | null>(null);
+
   const { data: collectors = [], isLoading } = useGetCollectorsQuery();
   const [createCollector, { isLoading: isCreating }] = useCreateCollectorMutation();
   const [updateUserName, { isLoading: isUpdatingName }] = useUpdateUserNameMutation();
   const [updateUserStatus, { isLoading: isUpdatingStatus }] = useUpdateUserStatusMutation();
+  const [deleteUser, { isLoading: isDeletingUser }] = useDeleteUserMutation();
 
   const filteredCollectors = useMemo(() => {
     if (!searchQuery.trim()) return collectors;
@@ -144,6 +151,16 @@ export const UserManagementPage: React.FC = () => {
       setStatusConfirmCollector(null);
     } catch (err: any) {
       setStatusErrMsg(err?.data?.detail || 'Failed to update collector status');
+    }
+  };
+
+  const handleConfirmDeleteCollector = async () => {
+    if (!collectorToDelete) return;
+    try {
+      await deleteUser(collectorToDelete.id).unwrap();
+      setCollectorToDelete(null);
+    } catch (err: any) {
+      alert(err?.data?.detail || 'Failed to delete collector');
     }
   };
 
@@ -338,6 +355,14 @@ export const UserManagementPage: React.FC = () => {
                           title={c.isActive ? 'Deactivate Collector' : 'Activate Collector'}
                         >
                           {c.isActive ? <UserX size={14} /> : <UserCheck size={14} />}
+                        </button>
+
+                        <button
+                          onClick={() => setCollectorToDelete(c)}
+                          className="p-1.5 rounded-lg border border-maroon-500/30 bg-maroon-500/10 text-maroon-700 dark:text-rose-400 hover:bg-maroon-500/20 transition-colors"
+                          title="Delete Collector"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -568,6 +593,22 @@ export const UserManagementPage: React.FC = () => {
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* Delete Collector Confirmation Modal */}
+      {collectorToDelete && (
+        <DeleteConfirmModal
+          isOpen={Boolean(collectorToDelete)}
+          onClose={() => setCollectorToDelete(null)}
+          onConfirm={handleConfirmDeleteCollector}
+          title="Delete Field Collector"
+          itemName={`${collectorToDelete.fullName || collectorToDelete.firstName} (${collectorToDelete.email})`}
+          description={
+            collectorToDelete.collectionsCount && collectorToDelete.collectionsCount > 0
+              ? `This collector has recorded ${collectorToDelete.collectionsCount} collection entries. Deleting will deactivate the account and revoke mobile login access immediately to protect audit history.`
+              : `This will permanently delete collector account ${collectorToDelete.email} and revoke all access.`
+          }
+        />
       )}
     </div>
   );

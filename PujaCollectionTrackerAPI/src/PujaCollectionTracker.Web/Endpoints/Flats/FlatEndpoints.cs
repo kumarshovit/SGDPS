@@ -193,8 +193,11 @@ public class CreateFlatEndpoint(AppDbContext db) : Endpoint<CreateFlatRequest, R
 
   public override async Task<Results<Created<FlatDto>, ProblemHttpResult>> ExecuteAsync(CreateFlatRequest req, CancellationToken ct)
   {
-    var block = req.Block.Trim();
-    var flatNumber = req.FlatNumber.Trim();
+    var block = req.Block?.Trim() ?? "";
+    var flatNumber = req.FlatNumber?.Trim() ?? "";
+
+    if (string.IsNullOrWhiteSpace(block) || string.IsNullOrWhiteSpace(flatNumber))
+      return TypedResults.Problem(detail: "Block and Flat Number are required.", statusCode: 400);
 
     var exists = await db.Flats.AnyAsync(f => f.Block == block && f.FlatNumber == flatNumber, ct);
     if (exists)
@@ -205,7 +208,7 @@ public class CreateFlatEndpoint(AppDbContext db) : Endpoint<CreateFlatRequest, R
       Block = block,
       Floor = req.Floor,
       FlatNumber = flatNumber,
-      OwnerName = req.OwnerName.Trim(),
+      OwnerName = req.OwnerName?.Trim() ?? "",
       OwnerPhone = req.OwnerPhone?.Trim() ?? "",
       Email = req.Email?.Trim(),
       ExpectedAmount = req.ExpectedAmount,
@@ -279,8 +282,8 @@ public class ListBlocksEndpoint(AppDbContext db) : EndpointWithoutRequest<Result
 
       result.Add(new BlockItemDto(
         g.Key,
-        floors >= 18 ? floors : 18,
-        maxFlatsPerFloor >= 7 ? maxFlatsPerFloor : 7,
+        floors > 0 ? floors : 18,
+        maxFlatsPerFloor > 0 ? maxFlatsPerFloor : 7,
         totalUnits,
         activeUnits,
         expectedAmt,
@@ -349,7 +352,7 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
     {
       for (int unit = 1; unit <= unitsPerFloor; unit++)
       {
-        string flatNum = $"{fl}0{unit}";
+        string flatNum = unit < 10 ? $"{fl}0{unit}" : $"{fl}{unit}";
         newFlats.Add(new Flat
         {
           Block = blockName,
@@ -468,11 +471,11 @@ public class UpdateFlatEndpoint(AppDbContext db) : Endpoint<UpdateFlatRequest, R
     var flat = await db.Flats.FindAsync([id], ct);
     if (flat == null) return TypedResults.NotFound();
 
-    flat.Block = req.Block.Trim();
+    flat.Block = string.IsNullOrWhiteSpace(req.Block) ? flat.Block : req.Block.Trim();
     flat.Floor = req.Floor;
-    flat.FlatNumber = req.FlatNumber.Trim();
-    flat.OwnerName = req.OwnerName.Trim();
-    flat.OwnerPhone = req.OwnerPhone.Trim();
+    flat.FlatNumber = string.IsNullOrWhiteSpace(req.FlatNumber) ? flat.FlatNumber : req.FlatNumber.Trim();
+    flat.OwnerName = req.OwnerName?.Trim() ?? "";
+    flat.OwnerPhone = req.OwnerPhone?.Trim() ?? "";
     flat.Email = req.Email?.Trim();
     flat.ExpectedAmount = req.ExpectedAmount;
     flat.IsActive = req.IsActive;

@@ -29,17 +29,18 @@ import {
   getGlobalFloorsPerBlock,
   getGlobalFlatsPerFloor,
 } from '../../../utils/settingsHelper';
+import { getBrowserCoordinates, warmUpBrowserCoordinates } from '../../../utils/geoHelper';
 
-const QUICK_AMOUNTS = [1000, 2100, 2500, 5000, 11000, 21000];
+const QUICK_AMOUNTS = [500, 1000, 2000, 3000, 5000];
 
 export const AddEntryPage: React.FC = () => {
   const navigate = useNavigate();
   const [entryType, setEntryType] = useState<'ResidentBlock' | 'SponsorshipOther'>('ResidentBlock');
-  const [block, setBlock] = useState('A-Block');
-  const [floor, setFloor] = useState(1);
-  const [flat, setFlat] = useState(1);
+  const [block, setBlock] = useState('');
+  const [floor, setFloor] = useState<number | ''>('');
+  const [flat, setFlat] = useState<number | ''>('');
   const [sponsorshipCategories, setSponsorshipCategories] = useState<string[]>(getSponsorshipCategories());
-  const [category, setCategory] = useState<string>(() => getSponsorshipCategories()[0] || 'Sponsorship - Pratima');
+  const [category, setCategory] = useState<string>('');
   const [customCategory, setCustomCategory] = useState('');
   const [residentName, setResidentName] = useState('');
   const [ownerPhone, setOwnerPhone] = useState('');
@@ -70,8 +71,9 @@ export const AddEntryPage: React.FC = () => {
   const { data: collectors = [] } = useGetCollectorsQuery();
   const [createCollection, { isLoading: isSaving }] = useCreateCollectionMutation();
 
-  // Listen for settings updates to sync categories, blocks, and dimensions dynamically
+  // Prime geolocation and listen for settings updates
   useEffect(() => {
+    warmUpBrowserCoordinates();
     const fromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     setActiveBlocks(getActiveBlocks(fromFlats));
     setFloorsPerBlock(getGlobalFloorsPerBlock());
@@ -85,7 +87,7 @@ export const AddEntryPage: React.FC = () => {
       const updated = getSponsorshipCategories();
       setSponsorshipCategories(updated);
       if (!updated.includes(category) && category !== 'Other') {
-        setCategory(updated[0] || 'Other');
+        setCategory('');
       }
     };
     window.addEventListener('sgdps_settings_updated', handleSettingsUpdate);
@@ -110,34 +112,95 @@ export const AddEntryPage: React.FC = () => {
 
   // Block-specific flats for the currently selected block
   const blockFlats = useMemo(() => {
-    return flats.filter((f) => f.block === block);
+    if (!block) return [];
+    return flats.filter((f) => f.block.toLowerCase() === block.toLowerCase());
   }, [flats, block]);
 
-  // Floors based on global setting (default 9 floors)
+  // Floors based on flats in selected block or global setting
   const availableFloors = useMemo(() => {
-    const count = floorsPerBlock > 0 ? floorsPerBlock : 9;
+    if (!block) return [];
+    if (blockFlats.length > 0) {
+      const distinct = Array.from(new Set(blockFlats.map((f) => f.floor))).sort((a, b) => a - b);
+      if (distinct.length > 0) return distinct;
+    }
+    const count = floorsPerBlock > 0 ? floorsPerBlock : 18;
     return Array.from({ length: count }, (_, i) => i + 1);
-  }, [floorsPerBlock]);
+  }, [block, blockFlats, floorsPerBlock]);
 
-  // Flats per floor based on global setting (default 7 flats)
+  // Flats per floor based on flats in selected block or global setting
   const availableFlatUnits = useMemo(() => {
-    const count = flatsPerFloor > 0 ? flatsPerFloor : 7;
+    if (!block || floor === '') return [];
+    if (blockFlats.length > 0) {
+      const floorFlats = blockFlats.filter((f) => f.floor === floor);
+      if (floorFlats.length > 0) {
+        return floorFlats
+          .map((f) => {
+            const digits = f.flatNumber.replace(/\D/g, '');
+            let u = 1;
+            if (digits.length >= 3) {
+              u = parseInt(digits.slice(-2), 10) || parseInt(digits.slice(-1), 10) || 1;
+            } else if (digits.length > 0) {
+              u = parseInt(digits, 10) || 1;
+            }
+            return u;
+          })
+          .sort((a, b) => a - b);
+      }
+      let maxUnit = 0;
+      for (const f of blockFlats) {
+        const digits = f.flatNumber.replace(/\D/g, '');
+        let u = 1;
+        if (digits.length >= 3) {
+          u = parseInt(digits.slice(-2), 10) || parseInt(digits.slice(-1), 10) || 1;
+        } else if (digits.length > 0) {
+          u = parseInt(digits, 10) || 1;
+        }
+        if (u > maxUnit) maxUnit = u;
+      }
+      if (maxUnit > 0) {
+        return Array.from({ length: maxUnit }, (_, i) => i + 1);
+      }
+    }
+    const count = flatsPerFloor > 0 ? flatsPerFloor : 9;
     return Array.from({ length: count }, (_, i) => i + 1);
-  }, [flatsPerFloor]);
+  }, [block, floor, blockFlats, flatsPerFloor]);
 
   // Match flat if exists in selected block
-  const selectedFlatNumber = `${floor}0${flat}`;
-  const matchedFlat = blockFlats.find(
-    (f) => f.flatNumber === selectedFlatNumber || f.flatNumber === String(flat)
-  );
+  const selectedFlatNumber =
+    block && floor !== '' && flat !== ''
+      ? flat < 10
+        ? `${floor}0${flat}`
+        : `${floor}${flat}`
+      : '';
+  const matchedFlat = selectedFlatNumber
+    ? blockFlats.find(
+        (f) => f.flatNumber === selectedFlatNumber || f.flatNumber === String(flat)
+      )
+    : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) return;
 
+    if (entryType === 'ResidentBlock' && (!block || floor === '' || flat === '')) {
+      alert('Please select Block, Floor, and Flat Number.');
+      return;
+    }
+
+    if (entryType === 'SponsorshipOther' && !category) {
+      alert('Please select what this contribution is donating for (Donating for...).');
+      return;
+    }
+
     const finalBlock = block;
-    const finalFloor = floor;
+    const finalFloor = floor !== '' ? floor : undefined;
+    const finalFlatNumber =
+      floor !== '' && flat !== ''
+        ? flat < 10
+          ? `${floor}0${flat}`
+          : `${floor}${flat}`
+        : undefined;
 
     try {
       const finalCategory =
@@ -160,17 +223,22 @@ export const AddEntryPage: React.FC = () => {
           c.email === collectedByName
       );
 
+      // Auto-capture coordinates quietly in background without displaying in UI
+      const coords = await getBrowserCoordinates();
+
       const result = await createCollection({
         type: entryType,
         flatId: matchedFlat?.id,
         block: entryType === 'ResidentBlock' ? finalBlock : undefined,
         floor: entryType === 'ResidentBlock' ? finalFloor : undefined,
-        flatNumber: entryType === 'ResidentBlock' ? `${finalFloor}0${flat}` : undefined,
+        flatNumber: entryType === 'ResidentBlock' ? finalFlatNumber : undefined,
         category: entryType === 'SponsorshipOther' ? finalCategory : undefined,
         donorResidentName: residentName.trim() || matchedFlat?.ownerName || undefined,
         amount: amt,
         mode: paymentMode,
         transactionReference: referenceNo.trim() || undefined,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
         collectedByUserId: matchedCollector ? String(matchedCollector.id) : undefined,
         collectedByName: collectedByName,
         remarks: remarks.trim() || undefined,
@@ -184,7 +252,7 @@ export const AddEntryPage: React.FC = () => {
         name: residentName.trim() || matchedFlat?.ownerName || 'Resident',
         target:
           entryType === 'ResidentBlock'
-            ? `${finalBlock} · Flat ${finalFloor}0${flat}`
+            ? `${finalBlock} · Flat ${finalFlatNumber}`
             : finalCategory,
       });
     } catch (err: any) {
@@ -194,6 +262,11 @@ export const AddEntryPage: React.FC = () => {
 
   const handleResetForm = () => {
     setSuccessReceipt(null);
+    setBlock('');
+    setFloor('');
+    setFlat('');
+    setCategory('');
+    setCustomCategory('');
     setAmount('2500');
     setResidentName('');
     setOwnerPhone('');
@@ -223,9 +296,8 @@ export const AddEntryPage: React.FC = () => {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-leaf-500/15 border-2 border-leaf-500 text-leaf-600 shadow-glow-leaf">
             <CheckCircle2 size={36} />
           </div>
-
           <div className="space-y-1">
-            <h2 className="text-2xl font-extrabold text-charcoal-900 dark:text-cream-50 font-display">
+            <h2 className="text-xl font-extrabold text-charcoal-900 dark:text-cream-50 font-display">
               Collection Recorded Successfully!
             </h2>
             <p className="text-xs text-charcoal-500 dark:text-charcoal-300">
@@ -295,16 +367,26 @@ export const AddEntryPage: React.FC = () => {
                   {/* TOWER / BLOCK */}
                   <Select
                     label="Tower / Block"
+                    placeholder="Select Block"
                     value={block}
-                    onChange={(e) => setBlock(e.target.value)}
+                    onChange={(e) => {
+                      setBlock(e.target.value);
+                      setFloor('');
+                      setFlat('');
+                    }}
                     options={availableBlocks.map((b) => ({ label: b, value: b }))}
                   />
 
                   {/* FLOOR LEVEL */}
                   <Select
                     label="Floor Level"
+                    placeholder={block ? "Select Floor" : "Select Block first"}
                     value={floor}
-                    onChange={(e) => setFloor(parseInt(e.target.value))}
+                    disabled={!block}
+                    onChange={(e) => {
+                      setFloor(e.target.value ? parseInt(e.target.value) : '');
+                      setFlat('');
+                    }}
                     options={availableFloors.map((f) => ({
                       label: `${formatOrdinal(f)} Floor`,
                       value: f,
@@ -314,10 +396,12 @@ export const AddEntryPage: React.FC = () => {
                   {/* FLAT NUMBER */}
                   <Select
                     label="Flat Number"
+                    placeholder={floor !== '' ? "Select Flat" : "Select Floor first"}
                     value={flat}
-                    onChange={(e) => setFlat(parseInt(e.target.value))}
+                    disabled={!block || floor === ''}
+                    onChange={(e) => setFlat(e.target.value ? parseInt(e.target.value) : '')}
                     options={availableFlatUnits.map((fl) => ({
-                      label: `Flat ${fl} (${floor}0${fl})`,
+                      label: `Flat ${fl} (${floor !== '' ? (fl < 10 ? `${floor}0${fl}` : `${floor}${fl}`) : fl})`,
                       value: fl,
                     }))}
                   />
@@ -363,7 +447,8 @@ export const AddEntryPage: React.FC = () => {
             ) : (
               <div className="space-y-4">
                 <Select
-                  label="Category / Purpose *"
+                  label="Category / Purpose (Donating for) *"
+                  placeholder="Donating for..."
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   options={[

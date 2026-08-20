@@ -10,6 +10,7 @@ class FlatProvider extends ChangeNotifier {
   String? _errorMessage;
 
   List<FlatModel> get flats => _flats;
+  List<FlatModel> get activeFlats => _flats.where((f) => f.isActive).toList();
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
