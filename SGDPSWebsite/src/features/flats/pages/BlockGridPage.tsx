@@ -121,15 +121,15 @@ export const BlockGridPage: React.FC = () => {
 
   const blockData = gridData[activeBlock] || {};
 
-  // Compute floors dynamically based on actual flats in DB or block metadata
+  // Compute floors dynamically based on actual flats in DB or block metadata (ordered 1 to 18 ascending)
   const floors = useMemo(() => {
     if (blockFlats.length > 0) {
-      const distinctFloors = Array.from(new Set(blockFlats.map((f) => f.floor))).sort((a, b) => b - a);
+      const distinctFloors = Array.from(new Set(blockFlats.map((f) => f.floor))).sort((a, b) => a - b);
       if (distinctFloors.length > 0) return distinctFloors;
     }
     const dbBlock = dbBlocks.find((b) => b.blockName.toLowerCase() === activeBlock.toLowerCase());
     const configuredFloors = dbBlock?.floors || (globalFloors && globalFloors > 0 ? globalFloors : 18);
-    return Array.from({ length: configuredFloors }, (_, i) => i + 1).reverse();
+    return Array.from({ length: configuredFloors }, (_, i) => i + 1);
   }, [blockFlats, dbBlocks, activeBlock, globalFloors]);
 
   // Compute flat unit numbers dynamically based on actual flats in DB or block metadata

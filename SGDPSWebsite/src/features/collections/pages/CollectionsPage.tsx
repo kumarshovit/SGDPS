@@ -546,24 +546,24 @@ export const CollectionsPage: React.FC = () => {
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
-            className="rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 px-3 py-2 text-xs font-bold text-charcoal-700 dark:text-cream-200 outline-none"
+            className="rounded-xl border border-cream-border dark:border-charcoal-700 bg-white/95 dark:bg-charcoal-900 px-3 py-2 text-xs font-bold text-slate-900 dark:text-cream-50 outline-none"
           >
-            <option value="all">All Collection Types</option>
-            <option value="block">Resident / Block Only</option>
-            <option value="other">Sponsorship & Donations</option>
+            <option value="all" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">All Collection Types</option>
+            <option value="block" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">Resident / Block Only</option>
+            <option value="other" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">Sponsorship & Donations</option>
           </select>
 
           {/* Payment Mode Filter */}
           <select
             value={filterMode}
             onChange={(e) => setFilterMode(e.target.value)}
-            className="rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 px-3 py-2 text-xs font-bold text-charcoal-700 dark:text-cream-200 outline-none"
+            className="rounded-xl border border-cream-border dark:border-charcoal-700 bg-white/95 dark:bg-charcoal-900 px-3 py-2 text-xs font-bold text-slate-900 dark:text-cream-50 outline-none"
           >
-            <option value="all">All Payment Modes</option>
-            <option value="UPI">UPI / Digital Only</option>
-            <option value="Cash">Cash Only</option>
-            <option value="BankTransfer">Bank Transfer</option>
-            <option value="Cheque">Cheque</option>
+            <option value="all" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">All Payment Modes</option>
+            <option value="UPI" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">UPI / Digital Only</option>
+            <option value="Cash" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">Cash Only</option>
+            <option value="BankTransfer" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">Bank Transfer</option>
+            <option value="Cheque" className="text-slate-900 bg-white dark:bg-charcoal-900 dark:text-cream-50 font-semibold">Cheque</option>
           </select>
         </div>
 
