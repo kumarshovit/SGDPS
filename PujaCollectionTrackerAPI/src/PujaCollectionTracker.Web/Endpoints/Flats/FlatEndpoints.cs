@@ -273,17 +273,19 @@ public class ListBlocksEndpoint(AppDbContext db) : EndpointWithoutRequest<Result
     foreach (var g in grouped)
     {
       var blockFlats = g.ToList();
-      var floors = blockFlats.Select(f => f.Floor).Distinct().Count();
-      var maxFlatsPerFloor = blockFlats.GroupBy(f => f.Floor).Select(fg => fg.Count()).DefaultIfEmpty(0).Max();
-      var totalUnits = blockFlats.Count;
-      var activeUnits = blockFlats.Count(f => f.IsActive);
-      var expectedAmt = blockFlats.FirstOrDefault()?.ExpectedAmount ?? 2500m;
-      var isActive = blockFlats.Any(f => f.IsActive);
+      var activeFlats = blockFlats.Where(f => f.IsActive).ToList();
+      var countFlats = activeFlats.Count > 0 ? activeFlats : blockFlats;
+      var floors = countFlats.Select(f => f.Floor).Distinct().Count();
+      var maxFlatsPerFloor = countFlats.GroupBy(f => f.Floor).Select(fg => fg.Count()).DefaultIfEmpty(0).Max();
+      var totalUnits = countFlats.Count;
+      var activeUnits = activeFlats.Count;
+      var expectedAmt = (activeFlats.FirstOrDefault() ?? blockFlats.FirstOrDefault())?.ExpectedAmount ?? 2500m;
+      var isActive = activeFlats.Count > 0;
 
       result.Add(new BlockItemDto(
         g.Key,
         floors > 0 ? floors : 18,
-        maxFlatsPerFloor > 0 ? maxFlatsPerFloor : 7,
+        maxFlatsPerFloor > 0 ? maxFlatsPerFloor : 9,
         totalUnits,
         activeUnits,
         expectedAmt,
@@ -302,7 +304,7 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
     Post("/blocks");
     AllowAnonymous();
     Tags("Blocks");
-    Summary(s => s.Summary = "Create or activate a block with custom floors and flats per floor (default: 18 floors, 7 flats/floor)");
+    Summary(s => s.Summary = "Create or activate a block with custom floors and flats per floor (default: 18 floors, 9 flats/floor)");
   }
 
   public override async Task<Results<Ok<BlockItemDto>, ProblemHttpResult>> ExecuteAsync(CreateBlockRequest req, CancellationToken ct)
@@ -319,63 +321,86 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
     }
 
     int floorCount = req.Floors > 0 ? req.Floors : 18;
-    int unitsPerFloor = req.FlatsPerFloor > 0 ? req.FlatsPerFloor : 7;
+    int unitsPerFloor = req.FlatsPerFloor > 0 ? req.FlatsPerFloor : 9;
     decimal expectedAmt = req.ExpectedAmount > 0 ? req.ExpectedAmount : 2500m;
 
     var existingFlats = await db.Flats.Where(f => f.Block.ToLower() == blockName.ToLower()).ToListAsync(ct);
-    if (existingFlats.Count != 0)
-    {
-      foreach (var f in existingFlats)
-      {
-        f.IsActive = true;
-        if (req.ExpectedAmount > 0)
-        {
-          f.ExpectedAmount = expectedAmt;
-        }
-      }
-      await db.SaveChangesAsync(ct);
+    var existingFlatMap = existingFlats.ToDictionary(f => f.FlatNumber.Trim(), StringComparer.OrdinalIgnoreCase);
 
-      var existingDto = new BlockItemDto(
-        blockName,
-        existingFlats.Select(f => f.Floor).Distinct().Count(),
-        existingFlats.GroupBy(f => f.Floor).Select(g => g.Count()).DefaultIfEmpty(0).Max(),
-        existingFlats.Count,
-        existingFlats.Count,
-        expectedAmt,
-        true);
-
-      return TypedResults.Ok(existingDto);
-    }
-
+    var targetFlatNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     var newFlats = new List<Flat>();
+    var prefix = blockName.Length > 0 ? blockName[..1].ToUpper() : "U";
+
     for (int fl = 1; fl <= floorCount; fl++)
     {
       for (int unit = 1; unit <= unitsPerFloor; unit++)
       {
         string flatNum = unit < 10 ? $"{fl}0{unit}" : $"{fl}{unit}";
-        newFlats.Add(new Flat
+        targetFlatNumbers.Add(flatNum);
+
+        if (existingFlatMap.TryGetValue(flatNum, out var existingFlat))
         {
-          Block = blockName,
-          Floor = fl,
-          FlatNumber = flatNum,
-          OwnerName = $"Resident {blockName[..1].ToUpper()}-{flatNum}",
-          OwnerPhone = "",
-          ExpectedAmount = expectedAmt,
-          IsActive = true,
-          CreatedAt = DateTime.UtcNow
-        });
+          existingFlat.IsActive = true;
+          existingFlat.Floor = fl;
+          existingFlat.ExpectedAmount = expectedAmt;
+        }
+        else
+        {
+          var newFlat = new Flat
+          {
+            Block = blockName,
+            Floor = fl,
+            FlatNumber = flatNum,
+            OwnerName = $"Resident {prefix}-{flatNum}",
+            OwnerPhone = "",
+            ExpectedAmount = expectedAmt,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+          };
+          newFlats.Add(newFlat);
+        }
       }
     }
 
-    db.Flats.AddRange(newFlats);
+    // Any existing flats that are outside the new floor/unit bounds
+    var flatsOutsideBounds = existingFlats.Where(f => !targetFlatNumbers.Contains(f.FlatNumber.Trim())).ToList();
+    if (flatsOutsideBounds.Count > 0)
+    {
+      var outsideIds = flatsOutsideBounds.Select(f => f.Id).ToList();
+      var flatsWithCollections = await db.PaymentCollections
+        .Where(c => c.FlatId.HasValue && outsideIds.Contains(c.FlatId.Value))
+        .Select(c => c.FlatId!.Value)
+        .Distinct()
+        .ToListAsync(ct);
+
+      foreach (var outsideFlat in flatsOutsideBounds)
+      {
+        if (flatsWithCollections.Contains(outsideFlat.Id))
+        {
+          outsideFlat.IsActive = false; // Soft-deactivate to protect collection ledger
+        }
+        else
+        {
+          db.Flats.Remove(outsideFlat); // Permanently delete unused excess flats
+        }
+      }
+    }
+
+    if (newFlats.Count > 0)
+    {
+      db.Flats.AddRange(newFlats);
+    }
+
     await db.SaveChangesAsync(ct);
+
+    var totalActive = (existingFlats.Count(f => f.IsActive && targetFlatNumbers.Contains(f.FlatNumber.Trim()))) + newFlats.Count;
 
     var createdDto = new BlockItemDto(
       blockName,
       floorCount,
       unitsPerFloor,
-      newFlats.Count,
-      newFlats.Count,
+      totalActive,
+      totalActive,
       expectedAmt,
       true);
 
