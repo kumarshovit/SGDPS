@@ -248,7 +248,7 @@ public record CreateBlockRequest(
   string BlockName,
   int Floors = 18,
   int FlatsPerFloor = 7,
-  decimal ExpectedAmount = 2500m);
+  decimal ExpectedAmount = 0m);
 
 // GET /api/blocks
 public class ListBlocksEndpoint(AppDbContext db) : EndpointWithoutRequest<Results<Ok<List<BlockItemDto>>, ProblemHttpResult>>
@@ -258,33 +258,57 @@ public class ListBlocksEndpoint(AppDbContext db) : EndpointWithoutRequest<Result
     Get("/blocks");
     AllowAnonymous();
     Tags("Blocks");
-    Summary(s => s.Summary = "Get list of all blocks with dimensions and unit counts");
+    Summary(s => s.Summary = "Get list of all blocks with exact dimensions and unit counts");
   }
 
   public override async Task<Results<Ok<List<BlockItemDto>>, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
   {
+    var blocks = await db.Blocks.AsNoTracking().ToListAsync(ct);
     var flats = await db.Flats.AsNoTracking().ToListAsync(ct);
-    var grouped = flats.GroupBy(f => f.Block).OrderBy(g => g.Key).ToList();
+    var flatGroups = flats.GroupBy(f => f.Block, StringComparer.OrdinalIgnoreCase)
+      .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
     var result = new List<BlockItemDto>();
 
-    foreach (var g in grouped)
+    // 1. Return all blocks configured in Blocks table
+    foreach (var b in blocks.OrderBy(b => b.BlockName))
     {
-      var blockFlats = g.ToList();
-      var floors = blockFlats.Select(f => f.Floor).Distinct().Count();
-      var maxFlatsPerFloor = blockFlats.GroupBy(f => f.Floor).Select(fg => fg.Count()).DefaultIfEmpty(0).Max();
-      var totalUnits = blockFlats.Count;
-      var activeUnits = blockFlats.Count(f => f.IsActive);
-      var expectedAmt = blockFlats.FirstOrDefault()?.ExpectedAmount ?? 2500m;
-      var isActive = blockFlats.Any(f => f.IsActive);
+      var bFlats = flatGroups.TryGetValue(b.BlockName, out var list) ? list : new List<Flat>();
+      var totalUnits = bFlats.Count;
+      var activeUnits = bFlats.Count(f => f.IsActive);
 
       result.Add(new BlockItemDto(
-        g.Key,
-        floors >= 18 ? floors : 18,
-        maxFlatsPerFloor >= 7 ? maxFlatsPerFloor : 7,
+        b.BlockName,
+        b.Floors,
+        b.FlatsPerFloor,
         totalUnits,
         activeUnits,
-        expectedAmt,
-        isActive));
+        b.ExpectedAmount,
+        b.IsActive));
+    }
+
+    // 2. Return any legacy blocks in Flats table that are not yet in Blocks table
+    foreach (var g in flatGroups)
+    {
+      if (!blocks.Any(b => b.BlockName.Equals(g.Key, StringComparison.OrdinalIgnoreCase)))
+      {
+        var bFlats = g.Value;
+        var floors = bFlats.Select(f => f.Floor).Distinct().Count();
+        var maxFlatsPerFloor = bFlats.GroupBy(f => f.Floor).Select(fg => fg.Count()).DefaultIfEmpty(0).Max();
+        var totalUnits = bFlats.Count;
+        var activeUnits = bFlats.Count(f => f.IsActive);
+        var expectedAmt = bFlats.FirstOrDefault()?.ExpectedAmount ?? 0m;
+        var isActive = bFlats.Any(f => f.IsActive);
+
+        result.Add(new BlockItemDto(
+          g.Key,
+          floors > 0 ? floors : 18,
+          maxFlatsPerFloor > 0 ? maxFlatsPerFloor : 7,
+          totalUnits,
+          activeUnits,
+          expectedAmt,
+          isActive));
+      }
     }
 
     return TypedResults.Ok(result);
@@ -299,7 +323,7 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
     Post("/blocks");
     AllowAnonymous();
     Tags("Blocks");
-    Summary(s => s.Summary = "Create or activate a block with custom floors and flats per floor (default: 18 floors, 7 flats/floor)");
+    Summary(s => s.Summary = "Create or resize a block with custom dimensions and auto-provision flats (default: 18 floors, 7 flats/floor)");
   }
 
   public override async Task<Results<Ok<BlockItemDto>, ProblemHttpResult>> ExecuteAsync(CreateBlockRequest req, CancellationToken ct)
@@ -317,62 +341,82 @@ public class CreateBlockEndpoint(AppDbContext db) : Endpoint<CreateBlockRequest,
 
     int floorCount = req.Floors > 0 ? req.Floors : 18;
     int unitsPerFloor = req.FlatsPerFloor > 0 ? req.FlatsPerFloor : 7;
-    decimal expectedAmt = req.ExpectedAmount > 0 ? req.ExpectedAmount : 2500m;
+    decimal expectedAmt = req.ExpectedAmount >= 0 ? req.ExpectedAmount : 0m;
 
-    var existingFlats = await db.Flats.Where(f => f.Block.ToLower() == blockName.ToLower()).ToListAsync(ct);
-    if (existingFlats.Count != 0)
+    // 1. Upsert Block record
+    var blockRecord = await db.Blocks.FirstOrDefaultAsync(b => b.BlockName.ToLower() == blockName.ToLower(), ct);
+    if (blockRecord == null)
     {
-      foreach (var f in existingFlats)
+      blockRecord = new Block
       {
-        f.IsActive = true;
-        if (req.ExpectedAmount > 0)
-        {
-          f.ExpectedAmount = expectedAmt;
-        }
-      }
-      await db.SaveChangesAsync(ct);
-
-      var existingDto = new BlockItemDto(
-        blockName,
-        existingFlats.Select(f => f.Floor).Distinct().Count(),
-        existingFlats.GroupBy(f => f.Floor).Select(g => g.Count()).DefaultIfEmpty(0).Max(),
-        existingFlats.Count,
-        existingFlats.Count,
-        expectedAmt,
-        true);
-
-      return TypedResults.Ok(existingDto);
+        BlockName = blockName,
+        Floors = floorCount,
+        FlatsPerFloor = unitsPerFloor,
+        ExpectedAmount = expectedAmt,
+        IsActive = true,
+        CreatedAt = DateTime.UtcNow
+      };
+      db.Blocks.Add(blockRecord);
+    }
+    else
+    {
+      blockRecord.Floors = floorCount;
+      blockRecord.FlatsPerFloor = unitsPerFloor;
+      blockRecord.ExpectedAmount = expectedAmt;
+      blockRecord.IsActive = true;
+      blockRecord.UpdatedAt = DateTime.UtcNow;
     }
 
+    // 2. Fetch existing flats and provision any missing units
+    var existingFlats = await db.Flats.Where(f => f.Block.ToLower() == blockName.ToLower()).ToListAsync(ct);
+    var existingFlatNumbers = new HashSet<string>(existingFlats.Select(f => f.FlatNumber.Trim()), StringComparer.OrdinalIgnoreCase);
+
     var newFlats = new List<Flat>();
+    var prefix = blockName.Length > 0 ? blockName[..1].ToUpper() : "U";
+
     for (int fl = 1; fl <= floorCount; fl++)
     {
       for (int unit = 1; unit <= unitsPerFloor; unit++)
       {
         string flatNum = $"{fl}0{unit}";
-        newFlats.Add(new Flat
+        if (!existingFlatNumbers.Contains(flatNum))
         {
-          Block = blockName,
-          Floor = fl,
-          FlatNumber = flatNum,
-          OwnerName = $"Resident {blockName[..1].ToUpper()}-{flatNum}",
-          OwnerPhone = "",
-          ExpectedAmount = expectedAmt,
-          IsActive = true,
-          CreatedAt = DateTime.UtcNow
-        });
+          var newFlat = new Flat
+          {
+            Block = blockName,
+            Floor = fl,
+            FlatNumber = flatNum,
+            OwnerName = $"Resident {prefix}-{flatNum}",
+            OwnerPhone = "",
+            ExpectedAmount = expectedAmt,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+          };
+          newFlats.Add(newFlat);
+          existingFlats.Add(newFlat);
+        }
       }
     }
 
-    db.Flats.AddRange(newFlats);
+    // Re-activate all flats in the block
+    foreach (var f in existingFlats)
+    {
+      f.IsActive = true;
+    }
+
+    if (newFlats.Count > 0)
+    {
+      db.Flats.AddRange(newFlats);
+    }
+
     await db.SaveChangesAsync(ct);
 
     var createdDto = new BlockItemDto(
       blockName,
       floorCount,
       unitsPerFloor,
-      newFlats.Count,
-      newFlats.Count,
+      existingFlats.Count,
+      existingFlats.Count(f => f.IsActive),
       expectedAmt,
       true);
 
@@ -390,7 +434,7 @@ public class ToggleBlockStatusEndpoint(AppDbContext db) : Endpoint<ToggleBlockSt
     Put("/blocks/{blockName}/status");
     AllowAnonymous();
     Tags("Blocks");
-    Summary(s => s.Summary = "Activate or deactivate all flats in a block");
+    Summary(s => s.Summary = "Activate or deactivate all flats and the block itself");
   }
 
   public override async Task<Results<Ok<string>, NotFound, ProblemHttpResult>> ExecuteAsync(ToggleBlockStatusRequest req, CancellationToken ct)
@@ -400,8 +444,18 @@ public class ToggleBlockStatusEndpoint(AppDbContext db) : Endpoint<ToggleBlockSt
       return TypedResults.Problem(detail: "Block name is required", statusCode: 400);
 
     var cleanName = blockName.Trim().ToLowerInvariant();
+
+    // 1. Update Block entity if exists
+    var block = await db.Blocks.FirstOrDefaultAsync(b => b.BlockName.ToLower() == cleanName, ct);
+    if (block != null)
+    {
+      block.IsActive = req.IsActive;
+      block.UpdatedAt = DateTime.UtcNow;
+    }
+
+    // 2. Update all child flats
     var flats = await db.Flats.Where(f => f.Block.ToLower() == cleanName).ToListAsync(ct);
-    if (flats.Count == 0)
+    if (flats.Count == 0 && block == null)
       return TypedResults.NotFound();
 
     foreach (var flat in flats)
@@ -410,7 +464,7 @@ public class ToggleBlockStatusEndpoint(AppDbContext db) : Endpoint<ToggleBlockSt
     }
 
     await db.SaveChangesAsync(ct);
-    return TypedResults.Ok($"Updated {flats.Count} flats in block '{blockName}' to IsActive={req.IsActive}");
+    return TypedResults.Ok($"Updated block '{blockName}' and {flats.Count} flats to IsActive={req.IsActive}");
   }
 }
 
@@ -433,7 +487,9 @@ public class DeleteBlockEndpoint(AppDbContext db) : EndpointWithoutRequest<Resul
 
     var cleanName = blockName.Trim().ToLowerInvariant();
     var flats = await db.Flats.Where(f => f.Block.ToLower() == cleanName).ToListAsync(ct);
-    if (flats.Count == 0)
+    var block = await db.Blocks.FirstOrDefaultAsync(b => b.BlockName.ToLower() == cleanName, ct);
+
+    if (flats.Count == 0 && block == null)
       return TypedResults.NotFound();
 
     var flatIds = flats.Select(f => f.Id).ToList();
@@ -445,10 +501,17 @@ public class DeleteBlockEndpoint(AppDbContext db) : EndpointWithoutRequest<Resul
         statusCode: 400);
     }
 
-    db.Flats.RemoveRange(flats);
-    await db.SaveChangesAsync(ct);
+    if (flats.Count > 0)
+    {
+      db.Flats.RemoveRange(flats);
+    }
+    if (block != null)
+    {
+      db.Blocks.Remove(block);
+    }
 
-    return TypedResults.Ok($"Successfully deleted {flats.Count} flat units for block '{blockName}'.");
+    await db.SaveChangesAsync(ct);
+    return TypedResults.Ok($"Permanently deleted block '{blockName}' and {flats.Count} flats.");
   }
 }
 

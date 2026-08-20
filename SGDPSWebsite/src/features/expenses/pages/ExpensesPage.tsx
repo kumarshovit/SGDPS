@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useGetExpensesQuery,
   useCreateExpenseMutation,
@@ -30,6 +30,8 @@ import {
 } from 'lucide-react';
 import { exportExpensesToExcel } from '../../../utils/exportHelpers';
 import { PaymentMode } from '../../collections/types';
+import { SortableHeader } from '../../../components/ui/SortableHeader';
+import { useTableSort } from '../../../hooks/useTableSort';
 
 const EXPENSE_CATEGORIES = [
   'Decoration & Pandal',
@@ -90,7 +92,20 @@ export const ExpensesPage: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
-  const totalExpenseAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const { sortKey, sortDirection, handleSort, sortData } = useTableSort<Expense>();
+
+  const expenseSortGetters: Record<string, (item: Expense) => string | number | boolean | null | undefined> = useMemo(() => ({
+    category: (e) => e.category,
+    description: (e) => e.description,
+    paidToVendor: (e) => e.paidToVendor || '',
+    paymentMode: (e) => e.paymentMode,
+    expenseDate: (e) => e.expenseDate,
+    amount: (e) => e.amount,
+  }), []);
+
+  const sortedExpenses = sortData(filteredExpenses, expenseSortGetters);
+
+  const totalExpenseAmount = sortedExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Category Aggregation
   const categorySummary = React.useMemo(() => {
@@ -321,12 +336,12 @@ export const ExpensesPage: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
               <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                <th className="py-3 px-3">Category</th>
-                <th className="py-3 px-3">Description / Purpose</th>
-                <th className="py-3 px-3">Vendor / Recipient</th>
-                <th className="py-3 px-3">Mode</th>
-                <th className="py-3 px-3">Date</th>
-                <th className="py-3 px-3 text-right">Amount</th>
+                <SortableHeader label="Category" sortKey="category" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Description / Purpose" sortKey="description" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Vendor / Recipient" sortKey="paidToVendor" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Mode" sortKey="paymentMode" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Date" sortKey="expenseDate" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Amount" sortKey="amount" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} className="text-right" />
                 <th className="py-3 px-3 text-center">Receipt</th>
                 <th className="py-3 px-3 text-center">Actions</th>
               </tr>
@@ -338,14 +353,14 @@ export const ExpensesPage: React.FC = () => {
                     Loading expenses…
                   </td>
                 </tr>
-              ) : filteredExpenses.length === 0 ? (
+              ) : sortedExpenses.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-8 text-center text-charcoal-400">
                     No expense records found.
                   </td>
                 </tr>
               ) : (
-                filteredExpenses.map((exp) => (
+                sortedExpenses.map((exp) => (
                   <tr
                     key={exp.id}
                     className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"

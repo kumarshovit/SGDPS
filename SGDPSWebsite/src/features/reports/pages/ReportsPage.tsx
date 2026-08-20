@@ -12,6 +12,11 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
+import { SortableHeader } from '../../../components/ui/SortableHeader';
+import { useTableSort } from '../../../hooks/useTableSort';
+import { Collection } from '../../collections/types';
+import { Expense } from '../../expenses/types';
+import { Flat } from '../../flats/types';
 import {
   FileSpreadsheet,
   Download,
@@ -62,6 +67,44 @@ export const ReportsPage: React.FC = () => {
   const { data: collections = [], isLoading: isCollectionsLoading } = useGetCollectionsQuery();
   const { data: expenses = [], isLoading: isExpensesLoading } = useGetExpensesQuery();
   const { data: flats = [] } = useGetFlatsQuery();
+
+  // Sort hooks for each report table
+  const catSort = useTableSort<{ category: string; count: number; total: number; percentage: number }>();
+  const expLedgerSort = useTableSort<Expense>();
+  const colRegSort = useTableSort<Collection>();
+  const defSort = useTableSort<Flat>();
+
+  const catSortGetters = useMemo(() => ({
+    category: (c: { category: string }) => c.category,
+    total: (c: { total: number }) => c.total,
+    percentage: (c: { percentage: number }) => c.percentage,
+  }), []);
+
+  const expLedgerSortGetters = useMemo(() => ({
+    expenseDate: (e: Expense) => e.expenseDate,
+    category: (e: Expense) => e.category,
+    description: (e: Expense) => e.description,
+    paidToVendor: (e: Expense) => e.paidToVendor || '',
+    paymentMode: (e: Expense) => e.paymentMode,
+    amount: (e: Expense) => e.amount,
+  }), []);
+
+  const colRegSortGetters = useMemo(() => ({
+    receiptNumber: (c: Collection) => c.receiptNumber,
+    collectionDateTime: (c: Collection) => c.collectionDateTime,
+    donorResidentName: (c: Collection) => c.donorResidentName || '',
+    flatCategory: (c: Collection) => c.type === 'ResidentBlock' ? `${c.block} ${c.flatNumber}` : (c.category || ''),
+    mode: (c: Collection) => c.mode,
+    amount: (c: Collection) => c.amount,
+  }), []);
+
+  const defSortGetters = useMemo(() => ({
+    block: (d: Flat) => `${d.block} ${d.flatNumber}`,
+    ownerName: (d: Flat) => d.ownerName,
+    ownerPhone: (d: Flat) => d.ownerPhone || '',
+    totalCollected: (d: Flat) => d.totalCollected || 0,
+    paymentStatus: (d: Flat) => (d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0) ? 'Paid' : 'Unpaid',
+  }), []);
 
   // Helper to determine if a date string falls inside the selected date preset / custom range
   const isDateInRange = (dateStr?: string | null): boolean => {
@@ -693,13 +736,13 @@ export const ReportsPage: React.FC = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400 uppercase">
-                    <th className="py-3 px-3">Expense Category</th>
-                    <th className="py-3 px-3 text-right">Total Amount (₹)</th>
-                    <th className="py-3 px-3 text-right">Expense Share (%)</th>
+                    <SortableHeader label="Expense Category" sortKey="category" currentSortKey={catSort.sortKey} currentSortDir={catSort.sortDirection} onSort={catSort.handleSort} />
+                    <SortableHeader label="Total Amount (₹)" sortKey="total" currentSortKey={catSort.sortKey} currentSortDir={catSort.sortDirection} onSort={catSort.handleSort} className="text-right" />
+                    <SortableHeader label="Expense Share (%)" sortKey="percentage" currentSortKey={catSort.sortKey} currentSortDir={catSort.sortDirection} onSort={catSort.handleSort} className="text-right" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {categoryStats.map((c) => (
+                  {catSort.sortData(categoryStats, catSortGetters).map((c) => (
                     <tr
                       key={c.category}
                       className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -740,16 +783,16 @@ export const ReportsPage: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                    <th className="py-3 px-3">Date</th>
-                    <th className="py-3 px-3">Category</th>
-                    <th className="py-3 px-3">Description & Remarks</th>
-                    <th className="py-3 px-3">Paid To / Vendor</th>
-                    <th className="py-3 px-3">Mode</th>
-                    <th className="py-3 px-3 text-right">Amount (₹)</th>
+                    <SortableHeader label="Date" sortKey="expenseDate" currentSortKey={expLedgerSort.sortKey} currentSortDir={expLedgerSort.sortDirection} onSort={expLedgerSort.handleSort} />
+                    <SortableHeader label="Category" sortKey="category" currentSortKey={expLedgerSort.sortKey} currentSortDir={expLedgerSort.sortDirection} onSort={expLedgerSort.handleSort} />
+                    <SortableHeader label="Description & Remarks" sortKey="description" currentSortKey={expLedgerSort.sortKey} currentSortDir={expLedgerSort.sortDirection} onSort={expLedgerSort.handleSort} />
+                    <SortableHeader label="Paid To / Vendor" sortKey="paidToVendor" currentSortKey={expLedgerSort.sortKey} currentSortDir={expLedgerSort.sortDirection} onSort={expLedgerSort.handleSort} />
+                    <SortableHeader label="Mode" sortKey="paymentMode" currentSortKey={expLedgerSort.sortKey} currentSortDir={expLedgerSort.sortDirection} onSort={expLedgerSort.handleSort} />
+                    <SortableHeader label="Amount (₹)" sortKey="amount" currentSortKey={expLedgerSort.sortKey} currentSortDir={expLedgerSort.sortDirection} onSort={expLedgerSort.handleSort} className="text-right" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {filteredExpenses.map((e) => (
+                  {expLedgerSort.sortData(filteredExpenses, expLedgerSortGetters).map((e) => (
                     <tr
                       key={e.id}
                       className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -818,16 +861,16 @@ export const ReportsPage: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-[700px]">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                    <th className="py-3 px-3">Receipt #</th>
-                    <th className="py-3 px-3">Date</th>
-                    <th className="py-3 px-3">Donor / Resident</th>
-                    <th className="py-3 px-3">Flat / Category</th>
-                    <th className="py-3 px-3">Mode</th>
-                    <th className="py-3 px-3 text-right">Amount (₹)</th>
+                    <SortableHeader label="Receipt #" sortKey="receiptNumber" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                    <SortableHeader label="Date" sortKey="collectionDateTime" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                    <SortableHeader label="Donor / Resident" sortKey="donorResidentName" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                    <SortableHeader label="Flat / Category" sortKey="flatCategory" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                    <SortableHeader label="Mode" sortKey="mode" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                    <SortableHeader label="Amount (₹)" sortKey="amount" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} className="text-right" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {filteredCollections.map((c) => (
+                  {colRegSort.sortData(filteredCollections, colRegSortGetters).map((c) => (
                     <tr
                       key={c.id}
                       className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -909,15 +952,15 @@ export const ReportsPage: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-[650px]">
                 <thead>
                   <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                    <th className="py-3 px-3">Flat & Tower</th>
-                    <th className="py-3 px-3">Resident / Owner</th>
-                    <th className="py-3 px-3">Phone</th>
-                    <th className="py-3 px-3 text-right">Collected (₹)</th>
-                    <th className="py-3 px-3 text-center">Status</th>
+                    <SortableHeader label="Flat & Tower" sortKey="block" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
+                    <SortableHeader label="Resident / Owner" sortKey="ownerName" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
+                    <SortableHeader label="Phone" sortKey="ownerPhone" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
+                    <SortableHeader label="Collected (₹)" sortKey="totalCollected" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} className="text-right" />
+                    <SortableHeader label="Status" sortKey="paymentStatus" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} className="text-center" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {filteredDefaulters.map((d) => {
+                  {defSort.sortData(filteredDefaulters, defSortGetters).map((d) => {
                     const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
                     return (
                       <tr

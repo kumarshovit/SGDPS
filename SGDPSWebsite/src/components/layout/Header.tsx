@@ -193,15 +193,20 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         }
       }
 
-      // Re-activate existing active blocks
+      // Sync dimensions & activate active blocks in DB
       for (const blockName of activeBlocksList) {
-        const existsInDb = allDbBlocks.some((b) => b.toLowerCase() === blockName.toLowerCase());
-        if (existsInDb) {
-          try {
-            await toggleBlockStatus({ blockName, isActive: true }).unwrap();
-          } catch {
-            // continue
-          }
+        const existing = dbBlocks.find((b) => b.blockName.toLowerCase() === blockName.toLowerCase());
+        const targetFloors = existing?.floors && existing.floors > floorsPerBlock ? existing.floors : floorsPerBlock;
+        const targetFlats = existing?.flatsPerFloor && existing.flatsPerFloor > flatsPerFloor ? existing.flatsPerFloor : flatsPerFloor;
+        try {
+          await createBlock({
+            blockName,
+            floors: targetFloors > 0 ? targetFloors : 18,
+            flatsPerFloor: targetFlats > 0 ? targetFlats : 7,
+            expectedAmount: 0,
+          }).unwrap();
+        } catch {
+          // continue
         }
       }
 
@@ -211,6 +216,7 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           blockName: newBlock.name,
           floors: newBlock.floors,
           flatsPerFloor: newBlock.flatsPerFloor,
+          expectedAmount: 0,
         }).unwrap();
       }
 

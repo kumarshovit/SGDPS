@@ -1,14 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   useGetCollectionsQuery,
   useDeleteCollectionMutation,
 } from '../api/collectionApiSlice';
+import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
+import { getActiveBlocks } from '../../../utils/settingsHelper';
 import { formatCurrency, formatDateTime, parseDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
 import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
+import { SortableHeader } from '../../../components/ui/SortableHeader';
+import { useTableSort } from '../../../hooks/useTableSort';
 import {
   Search,
   FileSpreadsheet,
@@ -16,21 +20,108 @@ import {
   Receipt,
   MapPin,
   Share2,
+  Calendar,
 } from 'lucide-react';
 import { exportToExcel } from '../../../utils/exportHelpers';
 import { Collection } from '../types';
 
+type DatePreset = 'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'custom';
+
 export const CollectionsPage: React.FC = () => {
   const [query, setQuery] = useState('');
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [filterBlock, setFilterBlock] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [filterMode, setFilterMode] = useState('all');
   const [selectedReceipt, setSelectedReceipt] = useState<Collection | null>(null);
   const [collectionToDelete, setCollectionToDelete] = useState<Collection | null>(null);
 
   const { data: collections = [], isLoading } = useGetCollectionsQuery();
+  const { data: flats = [] } = useGetFlatsQuery();
   const [deleteCollection] = useDeleteCollectionMutation();
 
+  const availableBlocks = useMemo(() => {
+    const set = new Set<string>();
+    flats.filter((f) => f.isActive).forEach((f) => {
+      if (f.block) set.add(f.block);
+    });
+    getActiveBlocks().forEach((b) => set.add(b));
+    collections.forEach((c) => {
+      if (c.block) set.add(c.block);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [flats, collections]);
+
+  const isDateInRange = (dateStr?: string | null): boolean => {
+    if (!dateStr) return true;
+    if (datePreset === 'all') return true;
+
+    const target = parseDateTime(dateStr);
+    if (!target) return true;
+
+    const now = new Date();
+
+    if (datePreset === 'today') {
+      return (
+        target.getFullYear() === now.getFullYear() &&
+        target.getMonth() === now.getMonth() &&
+        target.getDate() === now.getDate()
+      );
+    }
+
+    if (datePreset === 'yesterday') {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      return (
+        target.getFullYear() === yesterday.getFullYear() &&
+        target.getMonth() === yesterday.getMonth() &&
+        target.getDate() === yesterday.getDate()
+      );
+    }
+
+    if (datePreset === 'this_week') {
+      const startOfWeek = new Date(now);
+      const day = startOfWeek.getDay();
+      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Monday
+      startOfWeek.setDate(diff);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(startOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      return target >= startOfWeek && target <= endOfWeek;
+    }
+
+    if (datePreset === 'this_month') {
+      return (
+        target.getFullYear() === now.getFullYear() &&
+        target.getMonth() === now.getMonth()
+      );
+    }
+
+    if (datePreset === 'custom') {
+      if (fromDate) {
+        const start = new Date(fromDate);
+        start.setHours(0, 0, 0, 0);
+        if (target < start) return false;
+      }
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        if (target > end) return false;
+      }
+      return true;
+    }
+
+    return true;
+  };
+
   const filtered = collections.filter((e) => {
+    if (!isDateInRange(e.collectionDateTime || e.createdAt)) return false;
+    if (filterBlock !== 'all' && e.block !== filterBlock) return false;
     if (filterType !== 'all') {
       if (filterType === 'block' && e.type !== 'ResidentBlock') return false;
       if (filterType === 'other' && e.type !== 'SponsorshipOther') return false;
@@ -70,11 +161,24 @@ export const CollectionsPage: React.FC = () => {
     return true;
   });
 
-  const sortedFiltered = [...filtered].sort((a, b) => {
+  const { sortKey, sortDirection, handleSort, sortData } = useTableSort<Collection>();
+
+  const collectionSortGetters: Record<string, (item: Collection) => string | number | boolean | null | undefined> = useMemo(() => ({
+    receiptNumber: (c) => c.receiptNumber,
+    unit: (c) => c.type === 'ResidentBlock' ? `${c.block} ${c.flatNumber}` : (c.category || ''),
+    donorResidentName: (c) => c.donorResidentName || '',
+    mode: (c) => c.mode,
+    collectedByName: (c) => c.collectedByName || 'Admin',
+    amount: (c) => c.amount,
+  }), []);
+
+  const defaultSorted = [...filtered].sort((a, b) => {
     const timeA = parseDateTime(a.collectionDateTime || a.createdAt)?.getTime() || 0;
     const timeB = parseDateTime(b.collectionDateTime || b.createdAt)?.getTime() || 0;
     return timeB - timeA;
   });
+
+  const sortedFiltered = sortData(defaultSorted, collectionSortGetters);
 
   const totalFilteredAmount = sortedFiltered.reduce((s, e) => s + (e.amount || 0), 0);
 
@@ -130,15 +234,54 @@ export const CollectionsPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Button */}
-        <Button
-          variant="secondary"
-          size="sm"
-          leftIcon={<FileSpreadsheet size={15} />}
-          onClick={handleExportExcel}
-        >
-          Export to Excel
-        </Button>
+        {/* Action Button & Date Filter */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Custom Date Range Pickers (shown when 'custom' is selected) */}
+          {datePreset === 'custom' && (
+            <div className="flex items-center gap-1.5 bg-cream-50/70 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 rounded-xl px-2.5 py-1.5 text-xs text-charcoal-700 dark:text-cream-200">
+              <Calendar size={13} className="text-gold-600 dark:text-gold-400 flex-shrink-0" />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="bg-transparent text-charcoal-900 dark:text-cream-50 text-xs outline-none cursor-pointer"
+                title="From Date"
+              />
+              <span className="text-charcoal-400 font-bold text-xs">–</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="bg-transparent text-charcoal-900 dark:text-cream-50 text-xs outline-none cursor-pointer"
+                title="To Date"
+              />
+            </div>
+          )}
+
+          {/* Date Filter Dropdown */}
+          <select
+            value={datePreset}
+            onChange={(e) => setDatePreset(e.target.value as DatePreset)}
+            className="rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 px-3 py-2 text-xs font-bold text-charcoal-700 dark:text-cream-200 outline-none cursor-pointer hover:border-gold-500/50 transition-colors"
+          >
+            <option value="all">📅 All Dates</option>
+            <option value="today">⚡ Today</option>
+            <option value="yesterday">⏪ Yesterday</option>
+            <option value="this_week">📆 This Week</option>
+            <option value="this_month">🗓️ This Month</option>
+            <option value="custom">🔍 Custom Range...</option>
+          </select>
+
+          {/* Export to Excel Button */}
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<FileSpreadsheet size={15} />}
+            onClick={handleExportExcel}
+          >
+            Export to Excel
+          </Button>
+        </div>
       </div>
 
       {/* Ledger Table GlassCard */}
@@ -159,6 +302,20 @@ export const CollectionsPage: React.FC = () => {
               className="w-full pl-9 pr-4 py-2 rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 text-xs sm:text-sm text-charcoal-900 dark:text-cream-50 outline-none focus:ring-2 focus:ring-gold-500/50"
             />
           </div>
+
+          {/* Block Filter */}
+          <select
+            value={filterBlock}
+            onChange={(e) => setFilterBlock(e.target.value)}
+            className="rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 px-3 py-2 text-xs font-bold text-charcoal-700 dark:text-cream-200 outline-none"
+          >
+            <option value="all">All Blocks</option>
+            {availableBlocks.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
 
           {/* Type Filter */}
           <select
@@ -190,12 +347,12 @@ export const CollectionsPage: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[750px]">
             <thead>
               <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                <th className="py-3 px-3">Receipt #</th>
-                <th className="py-3 px-3">Unit / Target</th>
-                <th className="py-3 px-3">Donor / Resident</th>
-                <th className="py-3 px-3">Mode</th>
-                <th className="py-3 px-3">Collector & Date</th>
-                <th className="py-3 px-3 text-right">Amount</th>
+                <SortableHeader label="Receipt #" sortKey="receiptNumber" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Unit / Target" sortKey="unit" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Donor / Resident" sortKey="donorResidentName" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Mode" sortKey="mode" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Collector" sortKey="collectedByName" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Amount" sortKey="amount" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} className="text-right" />
                 <th className="py-3 px-3 text-center">Actions</th>
               </tr>
             </thead>

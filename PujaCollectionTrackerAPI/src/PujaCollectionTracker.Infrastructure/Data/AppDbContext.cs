@@ -10,6 +10,7 @@ namespace PujaCollectionTracker.Infrastructure.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
   public DbSet<Flat> Flats => Set<Flat>();
+  public DbSet<Block> Blocks => Set<Block>();
   public DbSet<PaymentCollection> PaymentCollections => Set<PaymentCollection>();
   public DbSet<Expense> Expenses => Set<Expense>();
   public DbSet<User> Users => Set<User>();
@@ -23,6 +24,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
   {
     base.OnModelCreating(modelBuilder);
     modelBuilder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
+
+    modelBuilder.Entity<Block>().HasIndex(b => b.BlockName).IsUnique();
 
     // Global soft-delete query filters
     modelBuilder.Entity<PaymentCollection>().HasQueryFilter(e => !e.IsDeleted);

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCreateCollectionMutation } from '../api/collectionApiSlice';
-import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
+import { useGetFlatsQuery, useGetBlocksQuery } from '../../flats/api/flatApiSlice';
 import { useGetCollectorsQuery } from '../../users/api/userApiSlice';
 import { formatCurrency, formatOrdinal } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
@@ -23,9 +23,10 @@ import {
   Smartphone,
 } from 'lucide-react';
 import { PaymentMode } from '../types';
+import { BlockItem } from '../../flats/types';
 import {
-  getSponsorshipCategories,
   getActiveBlocks,
+  getSponsorshipCategories,
   getGlobalFloorsPerBlock,
   getGlobalFlatsPerFloor,
 } from '../../../utils/settingsHelper';
@@ -67,36 +68,31 @@ export const AddEntryPage: React.FC = () => {
   } | null>(null);
 
   const { data: flats = [] } = useGetFlatsQuery();
+  const { data: dbBlocks = [] } = useGetBlocksQuery();
   const { data: collectors = [] } = useGetCollectorsQuery();
   const [createCollection, { isLoading: isSaving }] = useCreateCollectionMutation();
 
-  // Listen for settings updates to sync categories, blocks, and dimensions dynamically
+  // Listen for real-time setting updates from modal
   useEffect(() => {
-    const fromFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
-    setActiveBlocks(getActiveBlocks(fromFlats));
-    setFloorsPerBlock(getGlobalFloorsPerBlock());
-    setFlatsPerFloor(getGlobalFlatsPerFloor());
-
-    const handleSettingsUpdate = () => {
-      const activeFlats = Array.from(new Set(flats.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
-      setActiveBlocks(getActiveBlocks(activeFlats));
+    const handleSettingsUpdated = () => {
+      setActiveBlocks(getActiveBlocks());
       setFloorsPerBlock(getGlobalFloorsPerBlock());
       setFlatsPerFloor(getGlobalFlatsPerFloor());
-      const updated = getSponsorshipCategories();
-      setSponsorshipCategories(updated);
-      if (!updated.includes(category) && category !== 'Other') {
-        setCategory(updated[0] || 'Other');
+      const updatedCats = getSponsorshipCategories();
+      setSponsorshipCategories(updatedCats);
+      if (updatedCats.length > 0 && !updatedCats.includes(category)) {
+        setCategory(updatedCats[0]);
       }
     };
-    window.addEventListener('sgdps_settings_updated', handleSettingsUpdate);
-    return () => window.removeEventListener('sgdps_settings_updated', handleSettingsUpdate);
-  }, [category, flats]);
+    window.addEventListener('sgdps_settings_updated', handleSettingsUpdated);
+    return () => window.removeEventListener('sgdps_settings_updated', handleSettingsUpdated);
+  }, [category]);
 
-  // Collector dropdown options
+  // Collectors dropdown options with Admin as default
   const collectorOptions = useMemo(() => {
-    const defaultOption = { label: '👑 Admin (System Admin & Treasurer)', value: 'Admin' };
+    const defaultOption = { label: '🛡️ Admin / Society Office', value: 'Admin' };
     const collectorList = collectors.map((c) => {
-      const name = c.fullName || `${c.firstName} ${c.lastName || ''}`.trim();
+      const name = c.fullName || `${c.firstName} ${c.lastName || ''}`.trim() || c.email;
       return {
         label: `📱 ${name} (Field Collector)`,
         value: name,
@@ -105,25 +101,37 @@ export const AddEntryPage: React.FC = () => {
     return [defaultOption, ...collectorList];
   }, [collectors]);
 
-  // Dynamic available blocks strictly from settings / active blocks
-  const availableBlocks = activeBlocks.length > 0 ? activeBlocks : ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+  // Dynamic available blocks strictly from dbBlocks or settings
+  const availableBlocks = useMemo(() => {
+    const fromDb = dbBlocks.filter((b: BlockItem) => b.isActive).map((b: BlockItem) => b.blockName);
+    if (fromDb.length > 0) return fromDb;
+    return activeBlocks.length > 0 ? activeBlocks : ['A-Block', 'B-Block', 'C-Block', 'D-Block'];
+  }, [dbBlocks, activeBlocks]);
 
   // Block-specific flats for the currently selected block
   const blockFlats = useMemo(() => {
-    return flats.filter((f) => f.block === block);
+    return flats.filter((f) => f.block.toLowerCase() === block.toLowerCase());
   }, [flats, block]);
 
-  // Floors based on global setting (default 9 floors)
-  const availableFloors = useMemo(() => {
-    const count = floorsPerBlock > 0 ? floorsPerBlock : 9;
-    return Array.from({ length: count }, (_, i) => i + 1);
-  }, [floorsPerBlock]);
+  // Block config from database
+  const activeBlockConfig = useMemo(() => {
+    return dbBlocks.find((b: BlockItem) => b.blockName.toLowerCase() === block.toLowerCase());
+  }, [dbBlocks, block]);
 
-  // Flats per floor based on global setting (default 7 flats)
-  const availableFlatUnits = useMemo(() => {
-    const count = flatsPerFloor > 0 ? flatsPerFloor : 7;
+  // Floors based on block config, flats in DB, or global settings (default 18)
+  const availableFloors = useMemo(() => {
+    const fromBlock = activeBlockConfig?.floors;
+    const fromFlats = blockFlats.length > 0 ? Math.max(...blockFlats.map((f) => f.floor)) : 0;
+    const count = fromBlock && fromBlock > 0 ? fromBlock : fromFlats > 0 ? fromFlats : (floorsPerBlock > 0 ? floorsPerBlock : 18);
     return Array.from({ length: count }, (_, i) => i + 1);
-  }, [flatsPerFloor]);
+  }, [activeBlockConfig, blockFlats, floorsPerBlock]);
+
+  // Flats per floor based on block config, settings, or default 7
+  const availableFlatUnits = useMemo(() => {
+    const fromBlock = activeBlockConfig?.flatsPerFloor;
+    const count = fromBlock && fromBlock > 0 ? fromBlock : (flatsPerFloor > 0 ? flatsPerFloor : 7);
+    return Array.from({ length: count }, (_, i) => i + 1);
+  }, [activeBlockConfig, flatsPerFloor]);
 
   // Match flat if exists in selected block
   const selectedFlatNumber = `${floor}0${flat}`;
@@ -324,25 +332,25 @@ export const AddEntryPage: React.FC = () => {
                 </div>
 
                 {/* Flat Status Preview Pill */}
-                {matchedFlat && (
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
-                    <div>
-                      <span className="text-charcoal-500 dark:text-charcoal-400">Selected Unit: </span>
-                      <strong className="text-charcoal-900 dark:text-cream-50">
-                        {matchedFlat.block} · Fl {matchedFlat.floor} · Flat {matchedFlat.flatNumber}
-                      </strong>
-                    </div>
-                    <Badge
-                      variant={
-                        matchedFlat.paymentStatus === 'Paid' || (matchedFlat.totalCollected || 0) > 0
-                          ? 'success'
-                          : 'danger'
-                      }
-                    >
-                      Status: {matchedFlat.paymentStatus === 'Paid' || (matchedFlat.totalCollected || 0) > 0 ? 'Paid' : 'Unpaid'}
-                    </Badge>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
+                  <div>
+                    <span className="text-charcoal-500 dark:text-charcoal-400">Selected Unit: </span>
+                    <strong className="text-charcoal-900 dark:text-cream-50">
+                      {matchedFlat
+                        ? `${matchedFlat.block} · Fl ${matchedFlat.floor} · Flat ${matchedFlat.flatNumber}`
+                        : `${block} · Fl ${floor} · Flat ${floor}0${flat}`}
+                    </strong>
                   </div>
-                )}
+                  <Badge
+                    variant={
+                      matchedFlat && (matchedFlat.paymentStatus === 'Paid' || (matchedFlat.totalCollected || 0) > 0)
+                        ? 'success'
+                        : 'danger'
+                    }
+                  >
+                    Status: {matchedFlat && (matchedFlat.paymentStatus === 'Paid' || (matchedFlat.totalCollected || 0) > 0) ? 'Paid' : 'Unpaid'}
+                  </Badge>
+                </div>
 
                 <Input
                   label="Resident / Payer Name (Optional)"

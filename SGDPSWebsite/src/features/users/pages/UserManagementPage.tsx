@@ -6,6 +6,8 @@ import {
   useUpdateUserStatusMutation,
 } from '../api/userApiSlice';
 import { Collector } from '../types';
+import { SortableHeader } from '../../../components/ui/SortableHeader';
+import { useTableSort } from '../../../hooks/useTableSort';
 import { formatCurrency, formatDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
@@ -68,6 +70,17 @@ export const UserManagementPage: React.FC = () => {
         c.email.toLowerCase().includes(q)
     );
   }, [collectors, searchQuery]);
+
+  const { sortKey, sortDirection, handleSort, sortData } = useTableSort<Collector>();
+
+  const collectorSortGetters: Record<string, (item: Collector) => string | number | boolean | null | undefined> = useMemo(() => ({
+    fullName: (c) => c.fullName || `${c.firstName} ${c.lastName || ''}`.trim(),
+    email: (c) => c.email,
+    totalCollected: (c) => c.totalCollected || 0,
+    isActive: (c) => c.isActive,
+  }), []);
+
+  const sortedCollectors = sortData(filteredCollectors, collectorSortGetters);
 
   const totalCollectors = collectors.length;
   const activeCollectors = collectors.filter((c) => c.isActive).length;
@@ -238,10 +251,10 @@ export const UserManagementPage: React.FC = () => {
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="bg-cream-100 dark:bg-charcoal-900 border-b border-cream-border dark:border-charcoal-700 text-charcoal-700 dark:text-charcoal-300 font-bold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="py-3.5 px-4">Collector Profile</th>
-                <th className="py-3.5 px-4">Login ID / Email</th>
-                <th className="py-3.5 px-4">Total Collected (₹)</th>
-                <th className="py-3.5 px-4 text-center">Status</th>
+                <SortableHeader label="Collector Profile" sortKey="fullName" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Login ID / Email" sortKey="email" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Total Collected (₹)" sortKey="totalCollected" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} />
+                <SortableHeader label="Status" sortKey="isActive" currentSortKey={sortKey} currentSortDir={sortDirection} onSort={handleSort} className="text-center" />
                 <th className="py-3.5 px-4 text-center">Actions</th>
               </tr>
             </thead>
@@ -252,14 +265,14 @@ export const UserManagementPage: React.FC = () => {
                     Loading collectors information...
                   </td>
                 </tr>
-              ) : filteredCollectors.length === 0 ? (
+              ) : sortedCollectors.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-charcoal-400">
                     No field collectors found matching criteria. Click <strong>Register Collector</strong> to add one.
                   </td>
                 </tr>
               ) : (
-                filteredCollectors.map((c) => (
+                sortedCollectors.map((c) => (
                   <tr
                     key={c.id}
                     className="hover:bg-cream-50/80 dark:hover:bg-charcoal-700/40 transition-colors"

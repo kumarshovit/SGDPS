@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Flat } from '../types';
 import { exportFlatsToExcel } from '../../../utils/exportHelpers';
-import { formatBlockName } from '../../../utils/settingsHelper';
+import { formatBlockName, getGlobalFloorsPerBlock, getGlobalFlatsPerFloor } from '../../../utils/settingsHelper';
 
 export const FlatMasterPage: React.FC = () => {
   const [selectedBlock, setSelectedBlock] = useState<string>('All');
@@ -98,10 +98,13 @@ export const FlatMasterPage: React.FC = () => {
     }
 
     try {
+      const floors = getGlobalFloorsPerBlock();
+      const flatsPerFloor = getGlobalFlatsPerFloor();
       await createBlock({
         blockName: formatted,
-        floors: 9,
-        flatsPerFloor: 7,
+        floors: floors > 0 ? floors : 18,
+        flatsPerFloor: flatsPerFloor > 0 ? flatsPerFloor : 7,
+        expectedAmount: 0,
       }).unwrap();
 
       setIsAddBlockModalOpen(false);
