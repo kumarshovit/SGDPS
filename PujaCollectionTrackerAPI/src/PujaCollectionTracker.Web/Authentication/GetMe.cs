@@ -75,6 +75,11 @@ public class GetMe(IMediator mediator, ILogger<GetMe> _logger)
     }
 
     var user = result.Value;
+    if (!user.IsActive)
+    {
+      return TypedResults.Unauthorized();
+    }
+
     return TypedResults.Ok(new UserMeResponse(
       user.Id.Value,
       user.FirstName,

@@ -225,6 +225,7 @@ public class UpdateUserStatusEndpoint(AppDbContext db) : Endpoint<UpdateUserStat
     else
     {
       user.Deactivate();
+      user.RevokeRefreshToken();
     }
 
     await db.SaveChangesAsync(ct);
@@ -247,3 +248,53 @@ public class UpdateUserStatusEndpoint(AppDbContext db) : Endpoint<UpdateUserStat
     return TypedResults.Ok(dto);
   }
 }
+
+// DELETE /api/users/{id}
+public class DeleteUserEndpoint(AppDbContext db) : EndpointWithoutRequest<Results<Ok<string>, NotFound, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Delete("/users/{id:int}");
+    AllowAnonymous();
+    Tags("Users");
+    Summary(s => s.Summary = "Delete or permanently deactivate a collector/user");
+  }
+
+  public override async Task<Results<Ok<string>, NotFound, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
+  {
+    var id = Route<int>("id");
+    var userId = UserId.From(id);
+    var user = await db.Users.Include(u => u.UserRoles).FirstOrDefaultAsync(u => u.Id == userId, ct);
+    if (user == null)
+      return TypedResults.NotFound();
+
+    var idStr = id.ToString();
+    var email = user.Email.Trim().ToLower();
+    var fullName = $"{user.FirstName} {user.LastName}".Trim().ToLower();
+    var firstName = user.FirstName.Trim().ToLower();
+
+    var hasCollections = await db.PaymentCollections.AnyAsync(c =>
+      c.CollectedByUserId == idStr ||
+      (c.CollectedByUserId != null && c.CollectedByUserId.ToLower() == email) ||
+      (!string.IsNullOrWhiteSpace(c.CollectedByName) && (
+        c.CollectedByName.Trim().ToLower() == email ||
+        c.CollectedByName.Trim().ToLower() == fullName ||
+        c.CollectedByName.Trim().ToLower() == firstName
+      )), ct);
+
+    if (hasCollections)
+    {
+      user.Deactivate();
+      user.RevokeRefreshToken();
+      await db.SaveChangesAsync(ct);
+      return TypedResults.Ok($"Collector '{user.FirstName} {user.LastName}' has recorded collections. The account has been deactivated and mobile access revoked to protect financial audit history.");
+    }
+
+    db.UserRoles.RemoveRange(user.UserRoles);
+    db.Users.Remove(user);
+    await db.SaveChangesAsync(ct);
+
+    return TypedResults.Ok($"Successfully deleted collector '{user.FirstName} {user.LastName}'.");
+  }
+}
+

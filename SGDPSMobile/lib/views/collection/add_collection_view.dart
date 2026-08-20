@@ -5,6 +5,7 @@ import '../../models/flat_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/collection_provider.dart';
 import '../../providers/flat_provider.dart';
+import '../../core/services/location_service.dart';
 import 'receipt_view.dart';
 
 class AddCollectionView extends StatefulWidget {
@@ -28,7 +29,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
   FlatModel? _selectedFlat;
 
   // Sponsorship Selection
-  String _selectedCategory = 'Sponsorship - Pratima';
+  String? _selectedCategory;
 
   // Text Controllers
   final _amountController = TextEditingController(text: '2500');
@@ -60,22 +61,21 @@ class _AddCollectionViewState extends State<AddCollectionView> {
   @override
   void initState() {
     super.initState();
+    // Warm up GPS & permissions in background as soon as user opens collection form
+    LocationService.requestPermissionIfNeeded();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      if (_collectedByController.text.isEmpty) {
-        _collectedByController.text = auth.user?.fullName ?? 'Collector';
-      }
+      _collectedByController.text = auth.user?.fullName.isNotEmpty == true
+          ? auth.user!.fullName
+          : (auth.user?.email ?? 'Collector');
 
       final flatProvider = Provider.of<FlatProvider>(context, listen: false);
-      if (flatProvider.flats.isEmpty) {
-        await flatProvider.fetchFlats();
-      }
+      await flatProvider.fetchFlats();
 
       if (mounted) {
-        if (widget.initialFlat != null) {
+        if (widget.initialFlat != null && widget.initialFlat!.isActive) {
           _applySelectedFlat(widget.initialFlat!);
-        } else if (flatProvider.flats.isNotEmpty) {
-          _applySelectedFlat(flatProvider.flats.first);
         }
       }
     });
@@ -99,8 +99,8 @@ class _AddCollectionViewState extends State<AddCollectionView> {
       _selectedBlock = flat.block;
       _selectedFloor = flat.floor;
       _selectedFlat = flat;
-      _residentNameController.text = flat.ownerName;
-      _phoneController.text = flat.ownerPhone;
+      _residentNameController.text = '';
+      _phoneController.text = '';
       _amountController.text = flat.expectedAmount > 0
           ? flat.expectedAmount.toStringAsFixed(0)
           : '2500';
@@ -108,31 +108,21 @@ class _AddCollectionViewState extends State<AddCollectionView> {
   }
 
   void _onBlockChanged(String? newBlock, List<FlatModel> flats) {
-    if (newBlock == null) return;
     setState(() {
       _selectedBlock = newBlock;
-      final floors = flats.where((f) => f.block == newBlock).map((f) => f.floor).toSet().toList()..sort();
-      _selectedFloor = floors.isNotEmpty ? floors.first : null;
-      
-      final matchingFlats = flats.where((f) => f.block == newBlock && f.floor == _selectedFloor).toList();
-      if (matchingFlats.isNotEmpty) {
-        _applySelectedFlat(matchingFlats.first);
-      } else {
-        _selectedFlat = null;
-      }
+      _selectedFloor = null;
+      _selectedFlat = null;
+      _residentNameController.text = '';
+      _phoneController.text = '';
     });
   }
 
   void _onFloorChanged(int? newFloor, List<FlatModel> flats) {
-    if (newFloor == null || _selectedBlock == null) return;
     setState(() {
       _selectedFloor = newFloor;
-      final matchingFlats = flats.where((f) => f.block == _selectedBlock && f.floor == newFloor).toList();
-      if (matchingFlats.isNotEmpty) {
-        _applySelectedFlat(matchingFlats.first);
-      } else {
-        _selectedFlat = null;
-      }
+      _selectedFlat = null;
+      _residentNameController.text = '';
+      _phoneController.text = '';
     });
   }
 
@@ -148,6 +138,13 @@ class _AddCollectionViewState extends State<AddCollectionView> {
     if (_collectionType == 'ResidentBlock' && _selectedFlat == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a resident unit')),
+      );
+      return;
+    }
+
+    if (_collectionType == 'SponsorshipOther' && (_selectedCategory == null || _selectedCategory!.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select donation purpose (Donating for...)')),
       );
       return;
     }
@@ -178,9 +175,17 @@ class _AddCollectionViewState extends State<AddCollectionView> {
       flatNumber: _collectionType == 'ResidentBlock' ? _selectedFlat?.flatNumber : null,
       category: finalCategory,
       donorResidentName: _collectionType == 'ResidentBlock'
-          ? (_residentNameController.text.trim().isNotEmpty ? _residentNameController.text.trim() : _selectedFlat?.ownerName)
+          ? (_residentNameController.text.trim().isNotEmpty
+              ? _residentNameController.text.trim()
+              : (_selectedFlat?.ownerName.isNotEmpty == true
+                  ? _selectedFlat!.ownerName
+                  : 'Resident'))
           : _donorNameController.text.trim(),
-      ownerPhone: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
+      ownerPhone: _phoneController.text.trim().isNotEmpty
+          ? _phoneController.text.trim()
+          : (_selectedFlat?.ownerPhone.isNotEmpty == true
+              ? _selectedFlat!.ownerPhone
+              : null),
       amount: amount,
       mode: _paymentMode,
       collectorName: collectorName,
@@ -211,7 +216,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
   Widget build(BuildContext context) {
     final flatProvider = Provider.of<FlatProvider>(context);
     final collectionProvider = Provider.of<CollectionProvider>(context);
-    final flats = flatProvider.flats;
+    final flats = flatProvider.activeFlats;
 
     // Derived lists for cascading dropdowns
     final availableBlocks = flats.map((f) => f.block).toSet().toList()..sort();
@@ -344,7 +349,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                           isExpanded: true,
                           underline: const SizedBox(),
                           icon: const Icon(Icons.arrow_drop_down, color: AppColors.goldDark),
-                          hint: const Text('Block', style: TextStyle(fontSize: 12)),
+                          hint: const Text('Block', style: TextStyle(fontSize: 12, color: AppColors.inkLight, fontWeight: FontWeight.w500)),
                           items: availableBlocks.map((b) {
                             return DropdownMenuItem<String>(
                               value: b,
@@ -367,7 +372,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                           isExpanded: true,
                           underline: const SizedBox(),
                           icon: const Icon(Icons.arrow_drop_down, color: AppColors.goldDark),
-                          hint: const Text('Floor', style: TextStyle(fontSize: 12)),
+                          hint: const Text('Floor', style: TextStyle(fontSize: 12, color: AppColors.inkLight, fontWeight: FontWeight.w500)),
                           items: availableFloors.map((f) {
                             return DropdownMenuItem<int>(
                               value: f,
@@ -390,7 +395,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                           isExpanded: true,
                           underline: const SizedBox(),
                           icon: const Icon(Icons.arrow_drop_down, color: AppColors.goldDark),
-                          hint: const Text('Flat #', style: TextStyle(fontSize: 12)),
+                          hint: const Text('Flat #', style: TextStyle(fontSize: 12, color: AppColors.inkLight, fontWeight: FontWeight.w500)),
                           items: availableFlats.map((flat) {
                             return DropdownMenuItem<FlatModel>(
                               value: flat,
@@ -413,6 +418,9 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1C1310)),
                   decoration: _buildInputDecoration(
                     label: 'Resident / Contributor Name (Optional)',
+                    hintText: _selectedFlat != null && _selectedFlat!.ownerName.isNotEmpty
+                        ? _selectedFlat!.ownerName
+                        : 'Resident Name',
                     icon: Icons.person_outline,
                   ),
                 ),
@@ -436,6 +444,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                     isExpanded: true,
                     underline: const SizedBox(),
                     icon: const Icon(Icons.arrow_drop_down, color: AppColors.goldDark),
+                    hint: const Text('Donating for...', style: TextStyle(fontSize: 12, color: AppColors.inkLight, fontWeight: FontWeight.w500)),
                     items: _sponsorshipCategories.map((cat) {
                       return DropdownMenuItem<String>(
                         value: cat,
@@ -497,20 +506,23 @@ class _AddCollectionViewState extends State<AddCollectionView> {
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1C1310)),
                 decoration: _buildInputDecoration(
                   label: 'Contact Phone Number (Optional)',
+                  hintText: _selectedFlat != null && _selectedFlat!.ownerPhone.isNotEmpty
+                      ? _selectedFlat!.ownerPhone
+                      : 'Mobile Number',
                   icon: Icons.phone_outlined,
                 ),
               ),
 
               const SizedBox(height: 12),
 
-              // Collected By Field (For Both)
+              // Collected By Field (Non-editable, auto-assigned to logged-in user)
               TextFormField(
                 controller: _collectedByController,
-                cursorColor: AppColors.saffron,
+                readOnly: true,
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1C1310)),
                 decoration: _buildInputDecoration(
-                  label: 'Collected By (Collector / Volunteer Name)',
-                  icon: Icons.badge_outlined,
+                  label: 'Collected By (Logged-in User)',
+                  icon: Icons.verified_user_outlined,
                 ),
               ),
 
@@ -528,9 +540,7 @@ class _AddCollectionViewState extends State<AddCollectionView> {
               // Quick Amount Chips
               Wrap(
                 spacing: 8,
-                children: (_collectionType == 'ResidentBlock'
-                        ? [1000, 2100, 2500, 5000, 11000]
-                        : [2100, 5000, 11000, 21000, 51000, 100000])
+                children: [500, 1000, 2000, 3000, 5000]
                     .map((amt) {
                   final isSelected = _amountController.text == amt.toString();
                   return ChoiceChip(
@@ -797,9 +807,15 @@ class _AddCollectionViewState extends State<AddCollectionView> {
     );
   }
 
-  InputDecoration _buildInputDecoration({required String label, required IconData icon}) {
+  InputDecoration _buildInputDecoration({
+    required String label,
+    required IconData icon,
+    String? hintText,
+  }) {
     return InputDecoration(
       labelText: label,
+      hintText: hintText,
+      hintStyle: const TextStyle(fontSize: 13, color: AppColors.inkLight, fontStyle: FontStyle.italic),
       labelStyle: const TextStyle(fontSize: 12, color: AppColors.inkMuted),
       prefixIcon: Icon(icon, size: 18, color: AppColors.goldDark),
       filled: true,

@@ -32,6 +32,9 @@ export const FlatMasterPage: React.FC = () => {
   // Add Block Modal State
   const [isAddBlockModalOpen, setIsAddBlockModalOpen] = useState<boolean>(false);
   const [blockNameToCreate, setBlockNameToCreate] = useState<string>('');
+  const [floorsToCreate, setFloorsToCreate] = useState<number>(18);
+  const [flatsPerFloorToCreate, setFlatsPerFloorToCreate] = useState<number>(9);
+  const [expectedAmountToCreate, setExpectedAmountToCreate] = useState<number>(2500);
   const [blockError, setBlockError] = useState<string>('');
 
   // Edit Flat Modal State
@@ -76,6 +79,9 @@ export const FlatMasterPage: React.FC = () => {
 
   const handleOpenAddBlockModal = () => {
     setBlockNameToCreate('');
+    setFloorsToCreate(18);
+    setFlatsPerFloorToCreate(9);
+    setExpectedAmountToCreate(2500);
     setBlockError('');
     setIsAddBlockModalOpen(true);
   };
@@ -102,9 +108,9 @@ export const FlatMasterPage: React.FC = () => {
       const flatsPerFloor = getGlobalFlatsPerFloor();
       await createBlock({
         blockName: formatted,
-        floors: floors > 0 ? floors : 18,
-        flatsPerFloor: flatsPerFloor > 0 ? flatsPerFloor : 7,
-        expectedAmount: 0,
+        floors: floorsToCreate > 0 ? floorsToCreate : 18,
+        flatsPerFloor: flatsPerFloorToCreate > 0 ? flatsPerFloorToCreate : 9,
+        expectedAmount: expectedAmountToCreate > 0 ? expectedAmountToCreate : 2500,
       }).unwrap();
 
       setIsAddBlockModalOpen(false);
@@ -323,7 +329,7 @@ export const FlatMasterPage: React.FC = () => {
           isOpen={isAddBlockModalOpen}
           onClose={() => setIsAddBlockModalOpen(false)}
           title="Register New Block / Tower"
-          subtitle="Automatically generates 9 floors × 7 flats (63 units) for this block"
+          subtitle="Configure block dimensions to automatically generate unit numbers for instant tracking"
         >
           <form onSubmit={handleCreateBlockSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -336,7 +342,7 @@ export const FlatMasterPage: React.FC = () => {
                   setBlockNameToCreate(e.target.value);
                   if (blockError) setBlockError('');
                 }}
-                placeholder="Enter letter (e.g. E, F, G, H) or block name"
+                placeholder="Enter letter (e.g. S, E, F, G, H) or block name"
                 icon={<Building2 size={16} />}
               />
               {blockError && (
@@ -346,12 +352,45 @@ export const FlatMasterPage: React.FC = () => {
               )}
             </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                label="Total Floors *"
+                type="number"
+                min={1}
+                max={50}
+                required
+                value={floorsToCreate}
+                onChange={(e) => setFloorsToCreate(parseInt(e.target.value) || 1)}
+                placeholder="18"
+              />
+              <Input
+                label="Rooms / Flats per Floor *"
+                type="number"
+                min={1}
+                max={30}
+                required
+                value={flatsPerFloorToCreate}
+                onChange={(e) => setFlatsPerFloorToCreate(parseInt(e.target.value) || 1)}
+                placeholder="9"
+              />
+            </div>
+
+            <Input
+              label="Default Expected Contribution (₹)"
+              type="number"
+              min={0}
+              step={100}
+              value={expectedAmountToCreate}
+              onChange={(e) => setExpectedAmountToCreate(parseFloat(e.target.value) || 0)}
+              placeholder="2500"
+            />
+
             <div className="p-3.5 rounded-2xl bg-gold-500/10 border border-gold-500/30 flex items-start gap-2.5 text-xs text-charcoal-800 dark:text-cream-100">
               <Sparkles size={18} className="text-gold-600 dark:text-gold-400 flex-shrink-0 mt-0.5" />
               <div>
-                <strong>Automatic 63-Unit Initialization:</strong>
+                <strong>Automatic {floorsToCreate * flatsPerFloorToCreate}-Unit Provisioning:</strong>
                 <p className="text-[11px] text-charcoal-500 dark:text-charcoal-300 mt-0.5">
-                  Creating this block will automatically provision Floors 1 to 9 with 7 flats per floor (e.g. 101 to 907) ready for instant collection tracking.
+                  Creates Floors 1 to {floorsToCreate} with {flatsPerFloorToCreate} rooms per floor (e.g. 101 to {floorsToCreate}{flatsPerFloorToCreate < 10 ? '0' + flatsPerFloorToCreate : flatsPerFloorToCreate}) ready for immediate dashboard & mobile sync.
                 </p>
               </div>
             </div>
@@ -361,7 +400,7 @@ export const FlatMasterPage: React.FC = () => {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" isLoading={isCreatingBlock}>
-                Create Block & 63 Flats
+                Create Block & {floorsToCreate * flatsPerFloorToCreate} Flats
               </Button>
             </div>
           </form>

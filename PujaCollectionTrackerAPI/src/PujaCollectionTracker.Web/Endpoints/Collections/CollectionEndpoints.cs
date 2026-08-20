@@ -49,8 +49,21 @@ public record CreateCollectionRequest(
 public record UpdateCollectionRequest(
   decimal Amount,
   string Mode,
-  string? TransactionReference,
-  string? Remarks);
+  string? Type = null,
+  int? FlatId = null,
+  string? Block = null,
+  int? Floor = null,
+  string? FlatNumber = null,
+  string? Category = null,
+  string? DonorResidentName = null,
+  string? TransactionReference = null,
+  string? CollectedByUserId = null,
+  string? CollectedByName = null,
+  string? Remarks = null,
+  DateTime? CollectionDateTime = null,
+  string? OwnerPhone = null,
+  double? Latitude = null,
+  double? Longitude = null);
 
 public record ListCollectionsQuery(
   string? Type,
@@ -213,6 +226,9 @@ public class CreateCollectionEndpoint(AppDbContext db) : Endpoint<CreateCollecti
 
   public override async Task<Results<Created<CollectionDto>, ProblemHttpResult>> ExecuteAsync(CreateCollectionRequest req, CancellationToken ct)
   {
+    Logger.LogInformation("Creating collection entry: Amount={Amount}, Mode={Mode}, Lat={Lat}, Lng={Lng}, Collector={Collector}",
+      req.Amount, req.Mode, req.Latitude, req.Longitude, req.CollectedByName);
+
     if (req.Amount <= 0)
       return TypedResults.Problem(detail: "Collection amount must be greater than 0", statusCode: 400);
 
@@ -344,10 +360,68 @@ public class UpdateCollectionEndpoint(AppDbContext db) : Endpoint<UpdateCollecti
 
     var mode = Enum.TryParse<PaymentMode>(req.Mode, true, out var parsedMode) ? parsedMode : c.Mode;
 
+    if (!string.IsNullOrWhiteSpace(req.Type) && Enum.TryParse<CollectionType>(req.Type, true, out var parsedType))
+    {
+      c.Type = parsedType;
+    }
+
+    if (c.Type == CollectionType.ResidentBlock)
+    {
+      if (req.FlatId.HasValue)
+      {
+        c.FlatId = req.FlatId.Value;
+        var flat = await db.Flats.FindAsync([req.FlatId.Value], ct);
+        if (flat != null)
+        {
+          c.Block = flat.Block;
+          c.Floor = flat.Floor;
+          c.FlatNumber = flat.FlatNumber;
+          if (!string.IsNullOrWhiteSpace(req.OwnerPhone))
+          {
+            flat.OwnerPhone = req.OwnerPhone.Trim();
+          }
+        }
+      }
+      else
+      {
+        if (!string.IsNullOrWhiteSpace(req.Block)) c.Block = req.Block;
+        if (req.Floor.HasValue) c.Floor = req.Floor.Value;
+        if (!string.IsNullOrWhiteSpace(req.FlatNumber)) c.FlatNumber = req.FlatNumber;
+      }
+      c.Category = null;
+    }
+    else
+    {
+      c.Category = req.Category ?? c.Category;
+      c.FlatId = null;
+      c.Block = null;
+      c.Floor = null;
+      c.FlatNumber = null;
+    }
+
+    if (req.DonorResidentName != null)
+      c.DonorResidentName = req.DonorResidentName.Trim();
+
     c.Amount = req.Amount;
     c.Mode = mode;
     c.TransactionReference = req.TransactionReference;
     c.Remarks = req.Remarks;
+
+    if (req.CollectionDateTime.HasValue)
+      c.CollectionDateTime = DateTime.SpecifyKind(req.CollectionDateTime.Value, DateTimeKind.Utc);
+
+    if (req.Latitude.HasValue)
+      c.Latitude = req.Latitude.Value;
+
+    if (req.Longitude.HasValue)
+      c.Longitude = req.Longitude.Value;
+
+    if (!string.IsNullOrWhiteSpace(req.CollectedByName))
+      c.CollectedByName = req.CollectedByName.Trim();
+
+    if (!string.IsNullOrWhiteSpace(req.CollectedByUserId))
+      c.CollectedByUserId = req.CollectedByUserId.Trim();
+
     c.UpdatedAt = DateTime.UtcNow;
 
     await db.SaveChangesAsync(ct);

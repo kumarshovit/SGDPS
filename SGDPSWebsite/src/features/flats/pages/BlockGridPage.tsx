@@ -18,6 +18,7 @@ import { Badge } from '../../../components/ui/Badge';
 import { Building2, Layers, Trash2, IndianRupee, Flame, Plus } from 'lucide-react';
 import { PaymentMode, Collection } from '../../collections/types';
 import { getActiveBlocks, getGlobalFloorsPerBlock, getGlobalFlatsPerFloor } from '../../../utils/settingsHelper';
+import { getBrowserCoordinates, warmUpBrowserCoordinates } from '../../../utils/geoHelper';
 
 export const BlockGridPage: React.FC = () => {
   const navigate = useNavigate();
@@ -66,6 +67,7 @@ export const BlockGridPage: React.FC = () => {
 
   // Keep active blocks and dimensions in sync with database and settings
   useEffect(() => {
+    warmUpBrowserCoordinates();
     const fromFlats = Array.from(new Set(flatsData.filter((f) => f.isActive).map((f) => f.block).filter(Boolean)));
     setActiveBlocks(getActiveBlocks(fromFlats));
 
@@ -91,7 +93,7 @@ export const BlockGridPage: React.FC = () => {
 
   // All flats configured specifically for the active block
   const blockFlats = useMemo(() => {
-    return flatsData.filter((f) => f.block === activeBlock);
+    return flatsData.filter((f) => f.block.toLowerCase() === activeBlock.toLowerCase());
   }, [flatsData, activeBlock]);
 
   // Grid aggregation: gridData[block][floor][flat] = totalAmount
@@ -103,8 +105,12 @@ export const BlockGridPage: React.FC = () => {
       const fl = c.floor || 1;
       let fNum = 1;
       if (c.flatNumber) {
-        const lastDigit = parseInt(c.flatNumber.slice(-1));
-        fNum = isNaN(lastDigit) ? 1 : lastDigit;
+        const digits = c.flatNumber.replace(/\D/g, '');
+        if (digits.length >= 3) {
+          fNum = parseInt(digits.slice(-2), 10) || parseInt(digits.slice(-1), 10) || 1;
+        } else if (digits.length > 0) {
+          fNum = parseInt(digits, 10) || 1;
+        }
       }
       map[b] = map[b] || {};
       map[b][fl] = map[b][fl] || {};
@@ -115,17 +121,47 @@ export const BlockGridPage: React.FC = () => {
 
   const blockData = gridData[activeBlock] || {};
 
-  // Compute floors strictly based on configured settings (e.g. 17 floors)
+  // Compute floors dynamically based on actual flats in DB or block metadata
   const floors = useMemo(() => {
-    const configuredFloors = globalFloors && globalFloors > 0 ? globalFloors : 18;
+    if (blockFlats.length > 0) {
+      const distinctFloors = Array.from(new Set(blockFlats.map((f) => f.floor))).sort((a, b) => b - a);
+      if (distinctFloors.length > 0) return distinctFloors;
+    }
+    const dbBlock = dbBlocks.find((b) => b.blockName.toLowerCase() === activeBlock.toLowerCase());
+    const configuredFloors = dbBlock?.floors || (globalFloors && globalFloors > 0 ? globalFloors : 18);
     return Array.from({ length: configuredFloors }, (_, i) => i + 1).reverse();
-  }, [globalFloors]);
+  }, [blockFlats, dbBlocks, activeBlock, globalFloors]);
 
-  // Compute flat unit numbers strictly based on configured settings (e.g. 7 or 9 flats)
+  // Compute flat unit numbers dynamically based on actual flats in DB or block metadata
   const flats = useMemo(() => {
-    const configuredFlats = globalFlats && globalFlats > 0 ? globalFlats : 7;
+    if (blockFlats.length > 0) {
+      let maxFlatNum = 0;
+      for (const f of blockFlats) {
+        const digits = f.flatNumber.replace(/\D/g, '');
+        let unit = 1;
+        if (digits.length >= 3) {
+          unit = parseInt(digits.slice(-2), 10) || parseInt(digits.slice(-1), 10) || 1;
+        } else if (digits.length > 0) {
+          unit = parseInt(digits, 10) || 1;
+        }
+        if (unit > maxFlatNum) maxFlatNum = unit;
+      }
+      // Also check max count of flats on any floor
+      const countsByFloor = new Map<number, number>();
+      for (const f of blockFlats) {
+        countsByFloor.set(f.floor, (countsByFloor.get(f.floor) || 0) + 1);
+      }
+      for (const count of countsByFloor.values()) {
+        if (count > maxFlatNum) maxFlatNum = count;
+      }
+      if (maxFlatNum > 0) {
+        return Array.from({ length: maxFlatNum }, (_, i) => i + 1);
+      }
+    }
+    const dbBlock = dbBlocks.find((b) => b.blockName.toLowerCase() === activeBlock.toLowerCase());
+    const configuredFlats = dbBlock?.flatsPerFloor || (globalFlats && globalFlats > 0 ? globalFlats : 7);
     return Array.from({ length: configuredFlats }, (_, i) => i + 1);
-  }, [globalFlats]);
+  }, [blockFlats, dbBlocks, activeBlock, globalFlats]);
 
   // Block Totals & Counts
   const { blockTotal, paidCount, totalUnits, pct } = useMemo(() => {
@@ -152,11 +188,15 @@ export const BlockGridPage: React.FC = () => {
       const fl = c.floor || 1;
       let fNum = 1;
       if (c.flatNumber) {
-        const lastDigit = parseInt(c.flatNumber.slice(-1));
-        fNum = isNaN(lastDigit) ? 1 : lastDigit;
+        const digits = c.flatNumber.replace(/\D/g, '');
+        if (digits.length >= 3) {
+          fNum = parseInt(digits.slice(-2), 10) || parseInt(digits.slice(-1), 10) || 1;
+        } else if (digits.length > 0) {
+          fNum = parseInt(digits, 10) || 1;
+        }
       }
       return (
-        b === selectedCell.block &&
+        b.toLowerCase() === selectedCell.block.toLowerCase() &&
         fl === selectedCell.floor &&
         fNum === selectedCell.flat
       );
@@ -178,7 +218,10 @@ export const BlockGridPage: React.FC = () => {
     localStorage.setItem('sgdps_collector_name', collectorName);
 
     try {
-      const flatNumStr = `${selectedCell.floor}0${selectedCell.flat}`;
+      const flatNumStr =
+        selectedCell.flat < 10
+          ? `${selectedCell.floor}0${selectedCell.flat}`
+          : `${selectedCell.floor}${selectedCell.flat}`;
       const matched = blockFlats.find(
         (f) => f.flatNumber === flatNumStr || f.flatNumber === String(selectedCell.flat)
       );
@@ -191,6 +234,9 @@ export const BlockGridPage: React.FC = () => {
           c.email === collectorName
       );
 
+      // Auto-capture coordinates quietly in background without displaying in UI
+      const coords = await getBrowserCoordinates();
+
       await createCollection({
         type: 'ResidentBlock',
         flatId: matched?.id,
@@ -200,6 +246,8 @@ export const BlockGridPage: React.FC = () => {
         donorResidentName: residentName.trim() || matched?.ownerName || undefined,
         amount: amt,
         mode: paymentMode,
+        latitude: coords.latitude,
+        longitude: coords.longitude,
         collectedByUserId: matchedCollector ? String(matchedCollector.id) : undefined,
         collectedByName: collectorName,
         collectionDateTime: new Date().toISOString(),
@@ -370,7 +418,7 @@ export const BlockGridPage: React.FC = () => {
                               }`}
                             >
                               <span className="text-[10px] opacity-75 font-mono">
-                                {floor}0{flat}
+                                {flat < 10 ? `${floor}0${flat}` : `${floor}${flat}`}
                               </span>
                               <span className="font-extrabold text-[11px]">
                                 {isPaid ? formatCurrency(amt) : '—'}
@@ -396,7 +444,7 @@ export const BlockGridPage: React.FC = () => {
         <Modal
           isOpen={Boolean(selectedCell)}
           onClose={() => setSelectedCell(null)}
-          title={`${selectedCell.block} · Floor ${selectedCell.floor} · Flat ${selectedCell.floor}0${selectedCell.flat}`}
+          title={`${selectedCell.block} · Floor ${selectedCell.floor} · Flat ${selectedCell.flat < 10 ? `${selectedCell.floor}0${selectedCell.flat}` : `${selectedCell.floor}${selectedCell.flat}`}`}
           subtitle="Review existing collections or record a new payment"
         >
           <div className="space-y-4">

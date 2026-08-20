@@ -3,6 +3,7 @@ class UserModel {
   final String firstName;
   final String lastName;
   final String email;
+  final bool isActive;
   final List<String> roles;
 
   UserModel({
@@ -10,6 +11,7 @@ class UserModel {
     required this.firstName,
     required this.lastName,
     required this.email,
+    this.isActive = true,
     required this.roles,
   });
 
@@ -21,6 +23,7 @@ class UserModel {
       firstName: json['firstName'] as String? ?? '',
       lastName: json['lastName'] as String? ?? '',
       email: json['email'] as String? ?? '',
+      isActive: json['isActive'] as bool? ?? true,
       roles: (json['roles'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? ['Collector'],
     );
   }
@@ -30,6 +33,7 @@ class UserModel {
     'firstName': firstName,
     'lastName': lastName,
     'email': email,
+    'isActive': isActive,
     'roles': roles,
   };
 }

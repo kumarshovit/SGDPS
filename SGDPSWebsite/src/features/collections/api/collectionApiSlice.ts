@@ -1,5 +1,5 @@
 import { baseApi } from '../../../app/api/baseApi';
-import { Collection, CreateCollectionInput, CollectionFilterParams } from '../types';
+import { Collection, CreateCollectionInput, UpdateCollectionInput, CollectionFilterParams } from '../types';
 
 export const collectionApiSlice = baseApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -29,6 +29,14 @@ export const collectionApiSlice = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Collections', 'Flats', 'BlockGrid', 'Dashboard', 'Reports', 'Users'],
     }),
+    updateCollection: builder.mutation<Collection, UpdateCollectionInput>({
+      query: ({ id, ...body }) => ({
+        url: `/collections/${id}`,
+        method: 'PUT',
+        body,
+      }),
+      invalidatesTags: ['Collections', 'Flats', 'BlockGrid', 'Dashboard', 'Reports', 'Users'],
+    }),
     deleteCollection: builder.mutation<void, number>({
       query: (id) => ({
         url: `/collections/${id}`,
@@ -43,5 +51,6 @@ export const {
   useGetCollectionsQuery,
   useGetCollectionByIdQuery,
   useCreateCollectionMutation,
+  useUpdateCollectionMutation,
   useDeleteCollectionMutation,
 } = collectionApiSlice;

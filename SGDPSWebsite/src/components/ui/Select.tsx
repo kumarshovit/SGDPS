@@ -5,15 +5,18 @@ import { twMerge } from 'tailwind-merge';
 export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;
   error?: string;
-  options: { label: string; value: string | number }[];
+  placeholder?: string;
+  options: { label: string; value: string | number; disabled?: boolean }[];
 }
 
 export const Select: React.FC<SelectProps> = ({
   label,
   error,
+  placeholder,
   options,
   className,
   id,
+  value,
   ...props
 }) => {
   const selectId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
@@ -30,9 +33,11 @@ export const Select: React.FC<SelectProps> = ({
       )}
       <select
         id={selectId}
+        value={value}
         className={twMerge(
           clsx(
             'w-full rounded-xl border border-cream-border dark:border-charcoal-700 bg-cream-50/70 dark:bg-charcoal-900 px-3.5 py-2.5 text-sm text-charcoal-900 dark:text-cream-50 transition-all duration-150',
+            (!value || value === '') && 'text-charcoal-400 dark:text-charcoal-500',
             'focus:outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 dark:focus:ring-gold-400/50 dark:focus:border-gold-400',
             error && 'border-maroon-600 focus:ring-maroon-500/50 focus:border-maroon-600',
             className
@@ -40,8 +45,13 @@ export const Select: React.FC<SelectProps> = ({
         )}
         {...props}
       >
+        {placeholder && (
+          <option value="" disabled hidden>
+            {placeholder}
+          </option>
+        )}
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+          <option key={opt.value} value={opt.value} disabled={opt.disabled}>
             {opt.label}
           </option>
         ))}

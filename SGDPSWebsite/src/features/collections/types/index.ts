@@ -55,3 +55,25 @@ export interface CollectionFilterParams {
   endDate?: string;
   search?: string;
 }
+
+export interface UpdateCollectionInput {
+  id: number;
+  type?: CollectionType;
+  flatId?: number;
+  block?: string;
+  floor?: number;
+  flatNumber?: string;
+  category?: string;
+  donorResidentName?: string;
+  amount: number;
+  mode: PaymentMode;
+  transactionReference?: string;
+  collectedByUserId?: string;
+  collectedByName?: string;
+  remarks?: string;
+  collectionDateTime?: string;
+  ownerPhone?: string;
+  latitude?: number;
+  longitude?: number;
+}
+

@@ -6,6 +6,7 @@ import {
 import { useGetCollectionsQuery } from '../../collections/api/collectionApiSlice';
 import { useGetExpensesQuery } from '../../expenses/api/expenseApiSlice';
 import { useGetFlatsQuery } from '../../flats/api/flatApiSlice';
+import { useGetCollectorsQuery } from '../../users/api/userApiSlice';
 import { formatCurrency, formatPdfCurrency, formatDateTime, formatDate, parseDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
@@ -30,6 +31,8 @@ import {
   Printer,
   FileText,
   CheckCircle2,
+  Users,
+  UserCheck,
 } from 'lucide-react';
 import {
   exportToExcel,
@@ -47,7 +50,8 @@ type ReportType =
   | 'category_expenses'
   | 'date_wise_expenses'
   | 'collections_register'
-  | 'defaulters';
+  | 'defaulters'
+  | 'collector_report';
 
 export const ReportsPage: React.FC = () => {
   // Report Configuration State
@@ -59,6 +63,7 @@ export const ReportsPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedPaymentMode, setSelectedPaymentMode] = useState('ALL');
   const [selectedBlock, setSelectedBlock] = useState('ALL');
+  const [selectedCollector, setSelectedCollector] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Queries
@@ -67,6 +72,7 @@ export const ReportsPage: React.FC = () => {
   const { data: collections = [], isLoading: isCollectionsLoading } = useGetCollectionsQuery();
   const { data: expenses = [], isLoading: isExpensesLoading } = useGetExpensesQuery();
   const { data: flats = [] } = useGetFlatsQuery();
+  const { data: collectors = [], isLoading: isCollectorsLoading } = useGetCollectorsQuery();
 
   // Sort hooks for each report table
   const catSort = useTableSort<{ category: string; count: number; total: number; percentage: number }>();
@@ -168,17 +174,24 @@ export const ReportsPage: React.FC = () => {
       if (!isDateInRange(c.collectionDateTime)) return false;
       if (selectedPaymentMode !== 'ALL' && c.mode !== selectedPaymentMode) return false;
       if (selectedBlock !== 'ALL' && c.block !== selectedBlock) return false;
+      if (selectedCollector !== 'ALL') {
+        const cName = (c.collectedByName || '').toLowerCase();
+        const cId = String(c.collectedByUserId || '').toLowerCase();
+        const target = selectedCollector.toLowerCase();
+        if (cName !== target && cId !== target) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const donor = (c.donorResidentName || '').toLowerCase();
         const blk = (c.block || '').toLowerCase();
         const rec = (c.receiptNumber || '').toLowerCase();
         const flatNo = (c.flatNumber || '').toLowerCase();
-        if (!donor.includes(q) && !blk.includes(q) && !rec.includes(q) && !flatNo.includes(q)) return false;
+        const collector = (c.collectedByName || '').toLowerCase();
+        if (!donor.includes(q) && !blk.includes(q) && !rec.includes(q) && !flatNo.includes(q) && !collector.includes(q)) return false;
       }
       return true;
     });
-  }, [collections, datePreset, fromDate, toDate, selectedPaymentMode, selectedBlock, searchQuery]);
+  }, [collections, datePreset, fromDate, toDate, selectedPaymentMode, selectedBlock, selectedCollector, searchQuery]);
 
   // Filtered Expenses
   const filteredExpenses = useMemo(() => {
@@ -274,6 +287,99 @@ export const ReportsPage: React.FC = () => {
     }
     return ['ALL', 'A-Block', 'B-Block', 'C-Block', 'D-Block'];
   }, [flats]);
+
+  const availableCollectors = useMemo(() => {
+    const set = new Set<string>();
+    for (const col of collectors) {
+      const name = col.fullName || `${col.firstName} ${col.lastName || ''}`.trim() || col.email;
+      if (name) set.add(name);
+    }
+    for (const c of collections) {
+      if (c.collectedByName) set.add(c.collectedByName);
+    }
+    return ['ALL', ...Array.from(set)];
+  }, [collectors, collections]);
+
+  // Collector Performance Aggregates
+  const collectorStats = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        name: string;
+        collectorId?: string;
+        totalAmount: number;
+        count: number;
+        cashAmount: number;
+        upiAmount: number;
+        otherAmount: number;
+        lastCollectionDate?: string;
+      }
+    > = {};
+
+    for (const col of collectors) {
+      const name = col.fullName || `${col.firstName} ${col.lastName || ''}`.trim() || col.email;
+      if (!name) continue;
+      map[name] = {
+        name,
+        collectorId: String(col.id),
+        totalAmount: 0,
+        count: 0,
+        cashAmount: 0,
+        upiAmount: 0,
+        otherAmount: 0,
+      };
+    }
+
+    for (const c of filteredCollections) {
+      const name = c.collectedByName || c.collectedByUserId || 'Admin / Direct';
+      if (!map[name]) {
+        map[name] = {
+          name,
+          collectorId: c.collectedByUserId,
+          totalAmount: 0,
+          count: 0,
+          cashAmount: 0,
+          upiAmount: 0,
+          otherAmount: 0,
+        };
+      }
+      map[name].totalAmount += c.amount || 0;
+      map[name].count += 1;
+      if (c.mode === 'Cash') map[name].cashAmount += c.amount || 0;
+      else if (c.mode === 'UPI') map[name].upiAmount += c.amount || 0;
+      else map[name].otherAmount += c.amount || 0;
+
+      if (
+        !map[name].lastCollectionDate ||
+        new Date(c.collectionDateTime) > new Date(map[name].lastCollectionDate!)
+      ) {
+        map[name].lastCollectionDate = c.collectionDateTime;
+      }
+    }
+
+    let list = Object.values(map);
+    if (selectedCollector !== 'ALL') {
+      list = list.filter((c) => c.name === selectedCollector || c.collectorId === selectedCollector);
+    }
+    return list.sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [collectors, filteredCollections, selectedCollector]);
+
+  const totalCollectorAmount = useMemo(
+    () => collectorStats.reduce((s, c) => s + c.totalAmount, 0),
+    [collectorStats]
+  );
+  const totalCollectorReceipts = useMemo(
+    () => collectorStats.reduce((s, c) => s + c.count, 0),
+    [collectorStats]
+  );
+  const totalCollectorCash = useMemo(
+    () => collectorStats.reduce((s, c) => s + c.cashAmount, 0),
+    [collectorStats]
+  );
+  const totalCollectorUpi = useMemo(
+    () => collectorStats.reduce((s, c) => s + c.upiAmount, 0),
+    [collectorStats]
+  );
 
   // Text label of active period filter
   const activePeriodLabel = useMemo(() => {
@@ -399,10 +505,57 @@ export const ReportsPage: React.FC = () => {
           `Total: ${filteredDefaulters.length} Units | Paid: ${flatsPaidCount} | Unpaid: ${flatsUnpaidCount} | Collected: ${formatPdfCurrency(flatsTotalCollected)}`,
           footRows
         );
+      } else if (reportType === 'collector_report') {
+        const rows = collectorStats.map((c) => [
+          c.name,
+          `${c.count} receipts`,
+          formatPdfCurrency(c.cashAmount),
+          formatPdfCurrency(c.upiAmount),
+          formatPdfCurrency(c.totalAmount),
+          periodCollectionTotal > 0 ? `${Math.round((c.totalAmount / periodCollectionTotal) * 100)}%` : '0%',
+        ]);
+        const footRows = [
+          [
+            { content: 'Total Field Collections', styles: { halign: 'left', fontStyle: 'bold' } },
+            { content: `${filteredCollections.length} receipts`, styles: { halign: 'center', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(filteredCollections.filter((c) => c.mode === 'Cash').reduce((s, c) => s + c.amount, 0)), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(filteredCollections.filter((c) => c.mode === 'UPI').reduce((s, c) => s + c.amount, 0)), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: formatPdfCurrency(periodCollectionTotal), styles: { halign: 'right', fontStyle: 'bold' } },
+            { content: '100%', styles: { halign: 'right', fontStyle: 'bold' } },
+          ],
+        ];
+        exportToPdf(
+          `Collector Performance & Audit Statement (${dateLabel})`,
+          ['Collector Name', 'Receipts', 'Cash (Rs.)', 'UPI (Rs.)', 'Total (Rs.)', 'Share'],
+          rows,
+          `SGDPS_Collector_Report_${datePreset}`,
+          `Total Field Collection: ${formatPdfCurrency(periodCollectionTotal)} across ${collectorStats.length} Collectors`,
+          footRows
+        );
       }
     } else {
       // Excel Export
-      if (reportType === 'category_expenses') {
+      if (reportType === 'collector_report') {
+        const data: any[] = collectorStats.map((c) => ({
+          'Collector Name': c.name,
+          'Receipts Count': c.count,
+          'Cash Collected (Rs)': c.cashAmount,
+          'UPI / Online Collected (Rs)': c.upiAmount,
+          'Total Collected (Rs)': c.totalAmount,
+          'Collection Share (%)': periodCollectionTotal > 0 ? `${Math.round((c.totalAmount / periodCollectionTotal) * 100)}%` : '0%',
+          'Last Active': c.lastCollectionDate ? formatDateTime(c.lastCollectionDate) : '—',
+        }));
+        data.push({
+          'Collector Name': 'TOTAL',
+          'Receipts Count': filteredCollections.length,
+          'Cash Collected (Rs)': filteredCollections.filter((c) => c.mode === 'Cash').reduce((s, c) => s + c.amount, 0),
+          'UPI / Online Collected (Rs)': filteredCollections.filter((c) => c.mode === 'UPI').reduce((s, c) => s + c.amount, 0),
+          'Total Collected (Rs)': periodCollectionTotal,
+          'Collection Share (%)': '100%',
+          'Last Active': '',
+        });
+        exportToExcel(data, `SGDPS_Collector_Report_${datePreset}`);
+      } else if (reportType === 'category_expenses') {
         exportCategoryExpensesToExcel(categoryStats);
       } else if (reportType === 'date_wise_expenses') {
         const data: any[] = filteredExpenses.map((e) => ({
@@ -533,11 +686,12 @@ export const ReportsPage: React.FC = () => {
                 { label: '📅 3. Date / Month-wise Expenses Ledger', value: 'date_wise_expenses' },
                 { label: '📥 4. Payment & Collection Entries Register', value: 'collections_register' },
                 { label: '🏢 5. All Flats Paid & Unpaid Status Report', value: 'defaulters' },
+                { label: '🧑‍💼 6. Field Collector Performance & Collection Report', value: 'collector_report' },
               ]}
             />
           </div>
 
-          {/* Filter Grid: Date Preset, Custom Range, Category, Mode, Block, Search */}
+          {/* Filter Grid: Date Preset, Custom Range, Category, Mode, Block, Collector, Search */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end pt-2 border-t border-cream-100 dark:border-charcoal-700">
             {/* 1. Date Preset Filter */}
             <div>
@@ -581,7 +735,7 @@ export const ReportsPage: React.FC = () => {
                     label="Expense Category"
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    disabled={reportType === 'defaulters' || reportType === 'collections_register'}
+                    disabled={reportType === 'defaulters' || reportType === 'collections_register' || reportType === 'collector_report'}
                     options={availableCategories.map((c) => ({
                       label: c === 'ALL' ? 'All Categories' : c,
                       value: c,
@@ -621,18 +775,35 @@ export const ReportsPage: React.FC = () => {
               />
             </div>
 
-            {/* 6. Keyword Search Input (When not taking custom date space) */}
+            {/* 6. Collector / Volunteer Filter */}
+            <div>
+              <Select
+                label="Collector / Volunteer"
+                value={selectedCollector}
+                onChange={(e) => setSelectedCollector(e.target.value)}
+                disabled={reportType === 'defaulters' || reportType === 'category_expenses' || reportType === 'date_wise_expenses'}
+                options={availableCollectors.map((c) => ({
+                  label: c === 'ALL' ? 'All Collectors' : `🧑‍💼 ${c}`,
+                  value: c,
+                }))}
+              />
+            </div>
+
+            {/* Keyword Search Input (When custom date range occupies columns) */}
             {datePreset === 'custom' && (
               <div>
                 <Select
-                  label="Expense Category"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  disabled={reportType === 'defaulters' || reportType === 'collections_register'}
-                  options={availableCategories.map((c) => ({
-                    label: c === 'ALL' ? 'All Categories' : c,
-                    value: c,
-                  }))}
+                  label="Payment Mode"
+                  value={selectedPaymentMode}
+                  onChange={(e) => setSelectedPaymentMode(e.target.value)}
+                  disabled={reportType === 'defaulters'}
+                  options={[
+                    { label: 'All Payment Modes', value: 'ALL' },
+                    { label: '📱 UPI', value: 'UPI' },
+                    { label: '💵 Cash', value: 'Cash' },
+                    { label: '🏦 Bank Transfer', value: 'BankTransfer' },
+                    { label: '📑 Cheque', value: 'Cheque' },
+                  ]}
                 />
               </div>
             )}
@@ -641,7 +812,7 @@ export const ReportsPage: React.FC = () => {
           {/* Quick Search bar below filters */}
           <div className="pt-2">
             <Input
-              placeholder="Search keyword (resident name, description, vendor, receipt #)..."
+              placeholder="Search keyword (collector name, resident name, description, vendor, receipt #)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               icon={<Search size={15} />}
@@ -996,6 +1167,198 @@ export const ReportsPage: React.FC = () => {
             </div>
           )}
         </GlassCard>
+      )}
+
+      {/* REPORT 6: Field Collector Performance & Collection Report */}
+      {reportType === 'collector_report' && (
+        <div className="space-y-6">
+          <GlassCard
+            title={`Field Collector Performance & Audit Report (${activePeriodLabel})`}
+            subtitle={`Showing ${collectorStats.length} collectors with ${totalCollectorReceipts} receipts totaling ${formatCurrency(totalCollectorAmount)}`}
+          >
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5 p-3 rounded-2xl bg-cream-50 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-xs">
+              <div>
+                <span className="text-charcoal-400 font-medium">Active Collectors:</span>
+                <div className="text-base font-extrabold text-charcoal-900 dark:text-cream-50">{collectorStats.length}</div>
+              </div>
+              <div>
+                <span className="text-leaf-600 dark:text-leaf-400 font-medium">Total Collected:</span>
+                <div className="text-base font-extrabold text-leaf-600 dark:text-leaf-400">{formatCurrency(totalCollectorAmount)}</div>
+              </div>
+              <div>
+                <span className="text-saffron-600 dark:text-gold-400 font-medium">Cash Collected:</span>
+                <div className="text-base font-extrabold text-saffron-700 dark:text-gold-400">{formatCurrency(totalCollectorCash)}</div>
+              </div>
+              <div>
+                <span className="text-indigo-600 dark:text-indigo-400 font-medium">UPI / Online:</span>
+                <div className="text-base font-extrabold text-indigo-600 dark:text-indigo-400">{formatCurrency(totalCollectorUpi)}</div>
+              </div>
+              <div>
+                <span className="text-charcoal-400 font-medium">Total Receipts:</span>
+                <div className="text-base font-extrabold text-charcoal-900 dark:text-cream-50">{totalCollectorReceipts}</div>
+              </div>
+            </div>
+
+            {isCollectorsLoading || isCollectionsLoading ? (
+              <div className="text-xs text-charcoal-400 py-12 text-center">Loading collector report…</div>
+            ) : collectorStats.length === 0 ? (
+              <div className="text-xs text-charcoal-400 py-12 text-center">No collector activity found for this period.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                      <th className="py-3 px-3">Collector Name</th>
+                      <th className="py-3 px-3 text-center">Receipts</th>
+                      <th className="py-3 px-3 text-right">Cash (₹)</th>
+                      <th className="py-3 px-3 text-right">UPI / Bank (₹)</th>
+                      <th className="py-3 px-3 text-right">Total (₹)</th>
+                      <th className="py-3 px-3 text-right">Share (%)</th>
+                      <th className="py-3 px-3 text-center">Last Active</th>
+                      <th className="py-3 px-3 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                    {collectorStats.map((c) => {
+                      const share = periodCollectionTotal > 0 ? Math.round((c.totalAmount / periodCollectionTotal) * 100) : 0;
+                      const isSelected = selectedCollector === c.name || (c.collectorId && selectedCollector === c.collectorId);
+                      return (
+                        <tr
+                          key={c.name}
+                          className={`hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors ${
+                            isSelected ? 'bg-saffron-50/60 dark:bg-saffron-950/20' : ''
+                          }`}
+                        >
+                          <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50 flex items-center gap-2">
+                            <span className="h-7 w-7 rounded-full bg-saffron-100 dark:bg-saffron-950/60 text-saffron-700 dark:text-gold-400 font-bold flex items-center justify-center text-xs">
+                              {c.name.charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <span>{c.name}</span>
+                              {c.collectorId && (
+                                <span className="block text-[10px] text-charcoal-400 font-mono">ID: {c.collectorId}</span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-3 text-center font-mono font-bold text-charcoal-700 dark:text-cream-100">
+                            {c.count}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right font-mono text-charcoal-700 dark:text-cream-200">
+                            {c.cashAmount > 0 ? formatCurrency(c.cashAmount) : '—'}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right font-mono text-charcoal-700 dark:text-cream-200">
+                            {c.upiAmount > 0 ? formatCurrency(c.upiAmount) : '—'}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                            {formatCurrency(c.totalAmount)}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right font-bold text-saffron-700 dark:text-gold-400">
+                            {share}%
+                          </td>
+
+                          <td className="py-3.5 px-3 text-center font-mono text-[11px] text-charcoal-500 dark:text-charcoal-400 whitespace-nowrap">
+                            {c.lastCollectionDate ? formatDateTime(c.lastCollectionDate) : '—'}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-center">
+                            <Button
+                              variant={isSelected ? 'primary' : 'secondary'}
+                              size="sm"
+                              onClick={() => setSelectedCollector(isSelected ? 'ALL' : c.name)}
+                            >
+                              {isSelected ? 'Viewing' : 'Inspect'}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-cream-50/80 dark:bg-charcoal-900/80 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
+                      <td className="py-3 px-3 text-charcoal-900 dark:text-cream-50 font-bold">
+                        Total ({collectorStats.length} Collectors)
+                      </td>
+                      <td className="py-3 px-3 text-center font-bold">
+                        {totalCollectorReceipts}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold font-mono">
+                        {formatCurrency(totalCollectorCash)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold font-mono">
+                        {formatCurrency(totalCollectorUpi)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                        +{formatCurrency(totalCollectorAmount)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-bold">100%</td>
+                      <td colSpan={2} />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </GlassCard>
+
+          {/* Individual Receipts Breakdown when a specific collector is filtered */}
+          {selectedCollector !== 'ALL' && (
+            <GlassCard
+              title={`Receipts Ledger for ${selectedCollector} (${filteredCollections.length} entries)`}
+              subtitle={`Detailed collection list submitted by ${selectedCollector}`}
+            >
+              {filteredCollections.length === 0 ? (
+                <div className="text-xs text-charcoal-400 py-8 text-center">No receipts recorded by this collector for the selected period.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[650px]">
+                    <thead>
+                      <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                        <th className="py-3 px-3">Receipt #</th>
+                        <th className="py-3 px-3">Date</th>
+                        <th className="py-3 px-3">Resident / Donor</th>
+                        <th className="py-3 px-3">Flat / Category</th>
+                        <th className="py-3 px-3">Mode</th>
+                        <th className="py-3 px-3 text-right">Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                      {filteredCollections.map((c) => (
+                        <tr
+                          key={c.id}
+                          className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                        >
+                          <td className="py-3 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
+                            {c.receiptNumber || `REC-${c.id}`}
+                          </td>
+                          <td className="py-3 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
+                            {formatDateTime(c.collectionDateTime)}
+                          </td>
+                          <td className="py-3 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                            {c.donorResidentName || 'Resident'}
+                          </td>
+                          <td className="py-3 px-3 text-charcoal-700 dark:text-charcoal-300">
+                            {c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation')}
+                          </td>
+                          <td className="py-3 px-3">
+                            <Badge variant="neutral" size="sm">{c.mode}</Badge>
+                          </td>
+                          <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono">
+                            {formatCurrency(c.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </GlassCard>
+          )}
+        </div>
       )}
     </div>
   );

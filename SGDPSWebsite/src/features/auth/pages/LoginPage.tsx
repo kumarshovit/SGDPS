@@ -4,7 +4,6 @@ import { useAppDispatch } from '../../../hooks/useAppDispatch';
 import { useAppSelector } from '../../../hooks/useAppSelector';
 import {
   useLoginMutation,
-  useRegisterMutation,
   useForgotPasswordMutation,
 } from '../api/authApiSlice';
 import { setCredentials } from '../slices/authSlice';
@@ -16,14 +15,13 @@ import {
   Mail,
   Flame,
   ArrowRight,
-  User,
   CheckCircle2,
   ArrowLeft,
   Send,
   AlertCircle,
 } from 'lucide-react';
 
-type AuthMode = 'login' | 'register' | 'forgot';
+type AuthMode = 'login' | 'forgot';
 
 export const LoginPage: React.FC = () => {
   const [mode, setMode] = useState<AuthMode>('login');
@@ -44,15 +42,12 @@ export const LoginPage: React.FC = () => {
   // Form Fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
 
   // Status & Feedback
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
   const [login, { isLoading: isLoggingIn }] = useLoginMutation();
-  const [register, { isLoading: isRegistering }] = useRegisterMutation();
   const [forgotPassword, { isLoading: isSendingReset }] = useForgotPasswordMutation();
 
   const dispatch = useAppDispatch();
@@ -86,38 +81,6 @@ export const LoginPage: React.FC = () => {
         err?.data?.detail ||
           err?.data?.message ||
           'Invalid email or password. Please verify connection.'
-      );
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
-
-    try {
-      await register({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        email: email.trim(),
-        password: password.trim(),
-        role: 'Admin', // Admin & Treasury access for web users
-      }).unwrap();
-
-      // Automatically log the new admin user in
-      const response = await login({ email, password }).unwrap();
-      dispatch(
-        setCredentials({
-          user: response.user,
-          token: response.accessToken,
-        })
-      );
-      navigate('/');
-    } catch (err: any) {
-      setErrorMsg(
-        err?.data?.detail ||
-          err?.data?.message ||
-          'Registration failed. Please verify your details.'
       );
     }
   };
@@ -168,40 +131,6 @@ export const LoginPage: React.FC = () => {
       {/* Auth Card */}
       <div className="relative z-10 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white/80 dark:bg-charcoal-800/80 backdrop-blur-xl border border-cream-border dark:border-charcoal-700 py-8 px-6 sm:px-8 rounded-3xl shadow-xl space-y-6">
-          {/* Segmented Mode Switcher (2 Tabs Only: Sign In & New Admin) */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-cream-100 dark:bg-charcoal-900 rounded-2xl border border-cream-border dark:border-charcoal-700">
-            <button
-              type="button"
-              onClick={() => {
-                setMode('login');
-                setErrorMsg('');
-                setSuccessMsg('');
-              }}
-              className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                mode === 'login' || mode === 'forgot'
-                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
-                  : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
-              }`}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMode('register');
-                setErrorMsg('');
-                setSuccessMsg('');
-              }}
-              className={`py-2 text-xs font-bold rounded-xl transition-all ${
-                mode === 'register'
-                  ? 'bg-white dark:bg-charcoal-800 text-saffron-700 dark:text-gold-400 shadow-sm'
-                  : 'text-charcoal-500 hover:text-charcoal-900 dark:hover:text-cream-50'
-              }`}
-            >
-              New Admin
-            </button>
-          </div>
-
           {/* Feedback Alerts */}
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-maroon-500/10 border border-maroon-500/30 text-maroon-700 dark:text-rose-400 text-xs flex items-start gap-2 animate-in fade-in">
@@ -225,7 +154,7 @@ export const LoginPage: React.FC = () => {
                 type="email"
                 required
                 icon={<Mail size={15} />}
-                placeholder="admin@sgdps.com"
+                placeholder=""
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -236,7 +165,7 @@ export const LoginPage: React.FC = () => {
                   type="password"
                   required
                   icon={<Lock size={15} />}
-                  placeholder="••••••••"
+                  placeholder=""
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -267,64 +196,7 @@ export const LoginPage: React.FC = () => {
             </form>
           )}
 
-          {/* 2. New Admin Registration Form */}
-          {mode === 'register' && (
-            <form className="space-y-3.5" onSubmit={handleRegister}>
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  label="First Name *"
-                  required
-                  icon={<User size={15} />}
-                  placeholder="Amit"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                />
-                <Input
-                  label="Last Name *"
-                  required
-                  placeholder="Chatterjee"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                />
-              </div>
-
-              <Input
-                label="Official Email *"
-                type="email"
-                required
-                icon={<Mail size={15} />}
-                placeholder="admin@sgdps.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-
-              <Input
-                label="Create Password *"
-                type="password"
-                required
-                icon={<Lock size={15} />}
-                placeholder="Minimum 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-
-              <div className="p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-[11px] text-gold-800 dark:text-gold-300">
-                ⭐ Registering here assigns full <strong>Admin & Treasury Management</strong> access to this web portal.
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                className="w-full py-3 text-sm font-bold"
-                isLoading={isRegistering}
-                rightIcon={<ArrowRight size={16} />}
-              >
-                Register & Access Portal
-              </Button>
-            </form>
-          )}
-
-          {/* 3. Forgot Password Form */}
+          {/* 2. Forgot Password Form */}
           {mode === 'forgot' && (
             <form className="space-y-4" onSubmit={handleForgotPassword}>
               <div>
@@ -341,7 +213,7 @@ export const LoginPage: React.FC = () => {
                 type="email"
                 required
                 icon={<Mail size={15} />}
-                placeholder="admin@sgdps.com"
+                placeholder=""
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />

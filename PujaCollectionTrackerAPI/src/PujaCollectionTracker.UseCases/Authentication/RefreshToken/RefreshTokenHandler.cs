@@ -36,9 +36,9 @@ public class RefreshTokenHandler(
       var user = await _repository.FirstOrDefaultAsync(
         new UserByRefreshTokenHashSpec(incomingHash), cancellationToken);
 
-      if (user is null || !user.IsRefreshTokenValid(incomingHash))
+      if (user is null || !user.IsRefreshTokenValid(incomingHash) || !user.IsActive)
       {
-        return Result<RefreshTokenResult>.Unauthorized("Invalid or expired refresh token.");
+        return Result<RefreshTokenResult>.Unauthorized("Invalid, expired, or deactivated refresh token.");
       }
 
       // 3. Generate new rotated refresh token and compute its hash

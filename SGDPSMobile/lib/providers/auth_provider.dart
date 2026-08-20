@@ -24,9 +24,31 @@ class AuthProvider extends ChangeNotifier {
       final token = await StorageService.getToken();
       final userJson = await StorageService.getUser();
       if (token != null && token.isNotEmpty && userJson != null) {
-        _user = UserModel.fromJson(jsonDecode(userJson));
-        notifyListeners();
-        return true;
+        // Verify active token & account status with server
+        try {
+          final response = await ApiClient.get(ApiConstants.getMe);
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final user = UserModel.fromJson(data);
+            if (user.isActive) {
+              _user = user;
+              await StorageService.saveUser(jsonEncode(data));
+              notifyListeners();
+              return true;
+            }
+          }
+          // Server returned 401/403/404 or user is inactive: clear session
+          await logout();
+          return false;
+        } catch (netErr) {
+          // If server is temporarily unreachable, fallback to cached user only if active
+          final cachedUser = UserModel.fromJson(jsonDecode(userJson));
+          if (cachedUser.isActive) {
+            _user = cachedUser;
+            notifyListeners();
+            return true;
+          }
+        }
       }
     } catch (e) {
       debugPrint('AUTO LOGIN ERROR: $e');
@@ -51,13 +73,20 @@ class AuthProvider extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (data['user'] != null) {
+          final user = UserModel.fromJson(data['user']);
+          if (!user.isActive) {
+            _errorMessage = 'This account has been deactivated or deleted. Please contact your administrator.';
+            _isLoading = false;
+            notifyListeners();
+            return false;
+          }
+          _user = user;
+          await StorageService.saveUser(jsonEncode(data['user']));
+        }
         final token = data['accessToken'] as String?;
         if (token != null) {
           await StorageService.saveToken(token);
-        }
-        if (data['user'] != null) {
-          _user = UserModel.fromJson(data['user']);
-          await StorageService.saveUser(jsonEncode(data['user']));
         }
         _isLoading = false;
         notifyListeners();

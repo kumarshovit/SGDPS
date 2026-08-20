@@ -18,8 +18,8 @@ class _LoginViewState extends State<LoginView> {
   AuthMode _mode = AuthMode.login;
 
   // Controllers
-  final _emailController = TextEditingController(text: 'collector@sgdps.com');
-  final _passwordController = TextEditingController(text: 'Collector@123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _resetTokenController = TextEditingController();
   final _newPasswordController = TextEditingController();
 
@@ -312,12 +312,7 @@ class _LoginViewState extends State<LoginView> {
                         ),
                       ],
 
-                      const SizedBox(height: 18),
-
-                      const Text(
-                        'Central Database · Real-Time GPS Tracking',
-                        style: TextStyle(fontSize: 11, color: AppColors.inkLight),
-                      ),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),

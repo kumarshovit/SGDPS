@@ -33,6 +33,11 @@ public class LoginUserHandler(
     if (!_passwordHasher.Verify(command.Password, user.PasswordHash))
       return Result<LoginResult>.Unauthorized("Invalid email or password.");
 
+    if (!user.IsActive)
+    {
+      return Result<LoginResult>.Unauthorized("This account has been deactivated or deleted. Please contact your administrator.");
+    }
+
     if (!user.IsEmailVerified)
     {
       return Result<LoginResult>.Unauthorized("Please verify your email before logging in.");
