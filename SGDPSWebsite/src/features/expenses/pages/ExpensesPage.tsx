@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   useGetExpensesQuery,
+  useLazyGetExpenseAttachmentQuery,
   useCreateExpenseMutation,
   useUpdateExpenseMutation,
   useDeleteExpenseMutation,
@@ -27,9 +28,12 @@ import {
   FileText,
   Receipt,
   Calendar,
+  Loader2,
 } from 'lucide-react';
 import { exportExpensesToExcel } from '../../../utils/exportHelpers';
 import { PaymentMode } from '../../collections/types';
+import { TablePagination } from '../../../components/ui/TablePagination';
+import { usePagination } from '../../../hooks/usePagination';
 import { SortableHeader } from '../../../components/ui/SortableHeader';
 import { useTableSort } from '../../../hooks/useTableSort';
 
@@ -76,8 +80,10 @@ export const ExpensesPage: React.FC = () => {
   const [remarks, setRemarks] = useState<string>('');
   const [billAttachmentUrl, setBillAttachmentUrl] = useState<string>('');
   const [fileName, setFileName] = useState<string>('');
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
 
   const { data: expenses = [], isLoading } = useGetExpensesQuery();
+  const [getExpenseAttachment] = useLazyGetExpenseAttachmentQuery();
   const [createExpense, { isLoading: isCreating }] = useCreateExpenseMutation();
   const [updateExpense, { isLoading: isUpdating }] = useUpdateExpenseMutation();
   const [deleteExpense] = useDeleteExpenseMutation();
@@ -105,6 +111,16 @@ export const ExpensesPage: React.FC = () => {
 
   const sortedExpenses = sortData(filteredExpenses, expenseSortGetters);
 
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData: paginatedExpenses,
+    setCurrentPage,
+    setPageSize,
+  } = usePagination({ data: sortedExpenses, initialPageSize: 50 });
+
   const totalExpenseAmount = sortedExpenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Category Aggregation
@@ -119,22 +135,73 @@ export const ExpensesPage: React.FC = () => {
     }));
   }, [expenses]);
 
-  // Handle local bill/receipt image upload and convert to Base64 data URL
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Client-side image compression helper (compresses large camera photos to ~100-150KB)
+  const compressImageFile = async (file: File): Promise<string> => {
+    if (file.type === 'application/pdf') {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            resolve(reader.result as string);
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.75);
+          resolve(compressed);
+        };
+        img.onerror = () => resolve(reader.result as string);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Handle local bill/receipt image upload with instant compression
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit. Please upload a smaller image.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10MB limit. Please upload a smaller image.');
       return;
     }
 
     setFileName(file.name);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setBillAttachmentUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImageFile(file);
+      setBillAttachmentUrl(compressedDataUrl);
+    } catch {
+      alert('Failed to process attachment file.');
+    }
   };
 
   const handleRemoveFile = () => {
@@ -142,7 +209,7 @@ export const ExpensesPage: React.FC = () => {
     setFileName('');
   };
 
-  const handleOpenEditModal = (exp: Expense) => {
+  const handleOpenEditModal = async (exp: Expense) => {
     setEditingExpense(exp);
     setEditCategory(exp.category || EXPENSE_CATEGORIES[0]);
     setEditAmount(String(exp.amount));
@@ -154,23 +221,38 @@ export const ExpensesPage: React.FC = () => {
     setEditBillAttachmentUrl(exp.billAttachmentUrl || '');
     setEditFileName(exp.billAttachmentUrl ? 'Attached_Bill.png' : '');
     setIsEditModalOpen(true);
+
+    // Fetch full attachment on-demand for edit preview if needed
+    if (exp.billAttachmentUrl && !exp.billAttachmentUrl.startsWith('data:')) {
+      try {
+        const res = await getExpenseAttachment(exp.id).unwrap();
+        if (res?.billAttachmentUrl) {
+          setEditBillAttachmentUrl(res.billAttachmentUrl);
+          const ext = getAttachmentExtension(res.billAttachmentUrl);
+          setEditFileName(`Attached_Bill.${ext}`);
+        }
+      } catch (err) {
+        console.error('Failed to load attachment for preview:', err);
+      }
+    }
   };
 
-  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File size exceeds 5MB limit. Please upload a smaller image.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size exceeds 10MB limit. Please upload a smaller image.');
       return;
     }
 
     setEditFileName(file.name);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setEditBillAttachmentUrl(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressedDataUrl = await compressImageFile(file);
+      setEditBillAttachmentUrl(compressedDataUrl);
+    } catch {
+      alert('Failed to process attachment file.');
+    }
   };
 
   const handleRemoveEditFile = () => {
@@ -183,10 +265,18 @@ export const ExpensesPage: React.FC = () => {
     if (!editingExpense || !editAmount || parseFloat(editAmount) <= 0) return;
 
     try {
+      const now = new Date();
+      let expenseIso = now.toISOString();
+      if (editExpenseDate) {
+        const [y, m, d] = editExpenseDate.split('-').map(Number);
+        const entryDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        expenseIso = entryDate.toISOString();
+      }
+
       await updateExpense({
         id: editingExpense.id,
         data: {
-          expenseDate: editExpenseDate ? new Date(editExpenseDate).toISOString() : editingExpense.expenseDate,
+          expenseDate: expenseIso,
           category: editCategory,
           amount: parseFloat(editAmount),
           description: editDescription.trim(),
@@ -251,13 +341,34 @@ export const ExpensesPage: React.FC = () => {
     return 'png';
   };
 
-  // Direct download receipt helper with accurate file extension
-  const handleDownloadReceipt = (exp: Expense) => {
+  // Direct download receipt helper with on-demand retrieval
+  const handleDownloadReceipt = async (exp: Expense) => {
     if (!exp.billAttachmentUrl) return;
-    const ext = getAttachmentExtension(exp.billAttachmentUrl);
+    let dataUrl = exp.billAttachmentUrl;
+
+    if (!dataUrl.startsWith('data:')) {
+      try {
+        setDownloadingId(exp.id);
+        const res = await getExpenseAttachment(exp.id).unwrap();
+        if (res?.billAttachmentUrl) {
+          dataUrl = res.billAttachmentUrl;
+        } else {
+          alert('Could not retrieve receipt attachment.');
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to download attachment:', err);
+        alert('Failed to download receipt.');
+        return;
+      } finally {
+        setDownloadingId(null);
+      }
+    }
+
+    const ext = getAttachmentExtension(dataUrl);
     const link = document.createElement('a');
-    link.href = exp.billAttachmentUrl;
-    link.download = `Bill_Receipt_${exp.id}_${exp.category.replace(/[^a-zA-Z0-9]/g, '_')}.${ext}`;
+    link.href = dataUrl;
+    link.download = `Bill_Receipt_${exp.id}_${(exp.category || 'expense').replace(/[^a-zA-Z0-9]/g, '_')}.${ext}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -360,7 +471,7 @@ export const ExpensesPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedExpenses.map((exp) => (
+                paginatedExpenses.map((exp) => (
                   <tr
                     key={exp.id}
                     className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -413,11 +524,16 @@ export const ExpensesPage: React.FC = () => {
                       {exp.billAttachmentUrl ? (
                         <button
                           onClick={() => handleDownloadReceipt(exp)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-leaf-500/15 border border-leaf-500/30 text-leaf-700 dark:text-leaf-300 font-bold text-xs hover:bg-leaf-500/25 transition-all"
+                          disabled={downloadingId === exp.id}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-leaf-500/15 border border-leaf-500/30 text-leaf-700 dark:text-leaf-300 font-bold text-xs hover:bg-leaf-500/25 transition-all disabled:opacity-50"
                           title="Download Receipt"
                         >
-                          <Download size={12} />
-                          Download
+                          {downloadingId === exp.id ? (
+                            <Loader2 size={12} className="animate-spin text-leaf-600" />
+                          ) : (
+                            <Download size={12} />
+                          )}
+                          {downloadingId === exp.id ? 'Downloading...' : 'Download'}
                         </button>
                       ) : (
                         <span className="text-charcoal-400 text-xs italic">None</span>
@@ -449,6 +565,16 @@ export const ExpensesPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="expenses"
+        />
       </GlassCard>
 
       {/* Record Expense Modal */}

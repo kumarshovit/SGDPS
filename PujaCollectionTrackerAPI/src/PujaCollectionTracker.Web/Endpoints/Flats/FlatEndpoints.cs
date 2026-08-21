@@ -71,7 +71,7 @@ public class ListFlatsEndpoint(AppDbContext db) : EndpointWithoutRequest<Results
 
   public override async Task<Results<Ok<List<FlatDto>>, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
   {
-    var flats = await db.Flats.AsNoTracking().ToListAsync(ct);
+    var flats = await db.Flats.AsNoTracking().Where(f => f.IsActive).ToListAsync(ct);
     var collections = await db.PaymentCollections
       .AsNoTracking()
       .Where(c => c.Type == CollectionType.ResidentBlock && c.FlatId.HasValue)

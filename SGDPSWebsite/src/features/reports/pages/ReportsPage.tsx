@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   useGetDefaultersQuery,
   useGetDateWiseReportQuery,
@@ -13,6 +13,8 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
+import { TablePagination } from '../../../components/ui/TablePagination';
+import { usePagination } from '../../../hooks/usePagination';
 import { SortableHeader } from '../../../components/ui/SortableHeader';
 import { useTableSort } from '../../../hooks/useTableSort';
 import { Collection } from '../../collections/types';
@@ -33,6 +35,10 @@ import {
   CheckCircle2,
   Users,
   UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import {
   exportToExcel,
@@ -212,19 +218,36 @@ export const ReportsPage: React.FC = () => {
     });
   }, [expenses, datePreset, fromDate, toDate, selectedCategory, selectedPaymentMode, searchQuery]);
 
-  // Filtered Flats for Paid & Unpaid Status Report
+  // Filtered Flats for Paid & Unpaid Status Report (Active Only + High-Performance Search)
   const filteredDefaulters = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const isBlockFiltered = selectedBlock !== 'ALL';
+
     return flats.filter((d) => {
-      if (selectedBlock !== 'ALL' && d.block !== selectedBlock) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      // 1. Exclude inactive flats
+      if (d.isActive === false) return false;
+
+      // 2. Block Filter
+      if (isBlockFiltered && d.block !== selectedBlock) return false;
+
+      // 3. Fast Search Filter
+      if (q) {
+        const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
+        const status = isPaid ? 'paid' : 'unpaid';
         const name = (d.ownerName || '').toLowerCase();
         const blk = (d.block || '').toLowerCase();
         const flatNo = String(d.flatNumber || '').toLowerCase();
-        const phone = (d.ownerPhone || '').toLowerCase();
-        const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
-        const status = isPaid ? 'paid' : 'unpaid';
-        if (!name.includes(q) && !blk.includes(q) && !flatNo.includes(q) && !phone.includes(q) && !status.includes(q)) return false;
+        const phone = d.ownerPhone || '';
+
+        if (
+          !name.includes(q) &&
+          !blk.includes(q) &&
+          !flatNo.includes(q) &&
+          !phone.includes(q) &&
+          !status.includes(q)
+        ) {
+          return false;
+        }
       }
       return true;
     });
@@ -242,6 +265,36 @@ export const ReportsPage: React.FC = () => {
     () => filteredDefaulters.reduce((s, f) => s + (f.totalCollected || 0), 0),
     [filteredDefaulters]
   );
+
+  // Report 4: Sorted and Paginated Collections Register
+  const sortedColReg = useMemo(() => {
+    return colRegSort.sortData(filteredCollections, colRegSortGetters);
+  }, [filteredCollections, colRegSort, colRegSortGetters]);
+
+  const {
+    currentPage: colRegPage,
+    pageSize: colRegPageSize,
+    totalPages: totalColRegPages,
+    totalItems: totalColRegItems,
+    paginatedData: paginatedColReg,
+    setCurrentPage: setColRegPage,
+    setPageSize: setColRegPageSize,
+  } = usePagination({ data: sortedColReg, initialPageSize: 50 });
+
+  // Report 5: Sorted and Paginated Flats for Fast Rendering
+  const sortedDefaulters = useMemo(() => {
+    return defSort.sortData(filteredDefaulters, defSortGetters);
+  }, [filteredDefaulters, defSort, defSortGetters]);
+
+  const {
+    currentPage: defaultersPage,
+    pageSize: defaultersPageSize,
+    totalPages: totalDefaultersPages,
+    totalItems: totalDefaultersItems,
+    paginatedData: paginatedDefaulters,
+    setCurrentPage: setDefaultersPage,
+    setPageSize: setDefaultersPageSize,
+  } = usePagination({ data: sortedDefaulters, initialPageSize: 50 });
 
   // Financial Metrics (Calculated dynamically on Filtered Period)
   const periodCollectionTotal = useMemo(
@@ -286,7 +339,7 @@ export const ReportsPage: React.FC = () => {
   const availableBlocks = useMemo(() => {
     const set = new Set<string>();
     for (const f of flats) {
-      if (f.block) set.add(f.block);
+      if (f.isActive !== false && f.block) set.add(f.block);
     }
     for (const c of collections) {
       if (c.block) set.add(c.block);
@@ -1127,61 +1180,73 @@ export const ReportsPage: React.FC = () => {
           ) : filteredCollections.length === 0 ? (
             <div className="text-xs text-charcoal-400 py-12 text-center">No matching collections found for this filter.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead>
-                  <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                    <SortableHeader label="Receipt #" sortKey="receiptNumber" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
-                    <SortableHeader label="Date" sortKey="collectionDateTime" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
-                    <SortableHeader label="Donor / Resident" sortKey="donorResidentName" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
-                    <SortableHeader label="Flat / Category" sortKey="flatCategory" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
-                    <SortableHeader label="Mode" sortKey="mode" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
-                    <SortableHeader label="Amount (₹)" sortKey="amount" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} className="text-right" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {colRegSort.sortData(filteredCollections, colRegSortGetters).map((c) => (
-                    <tr
-                      key={c.id}
-                      className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
-                    >
-                      <td className="py-3.5 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
-                        {c.receiptNumber || `REC-${c.id}`}
-                      </td>
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[700px]">
+                  <thead>
+                    <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                      <SortableHeader label="Receipt #" sortKey="receiptNumber" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                      <SortableHeader label="Date" sortKey="collectionDateTime" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                      <SortableHeader label="Donor / Resident" sortKey="donorResidentName" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                      <SortableHeader label="Flat / Category" sortKey="flatCategory" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                      <SortableHeader label="Mode" sortKey="mode" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} />
+                      <SortableHeader label="Amount (₹)" sortKey="amount" currentSortKey={colRegSort.sortKey} currentSortDir={colRegSort.sortDirection} onSort={colRegSort.handleSort} className="text-right" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                    {paginatedColReg.map((c) => (
+                      <tr
+                        key={c.id}
+                        className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                      >
+                        <td className="py-3.5 px-3 font-mono font-bold text-saffron-700 dark:text-gold-400">
+                          {c.receiptNumber || `REC-${c.id}`}
+                        </td>
 
-                      <td className="py-3.5 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
-                        {formatDateTime(c.collectionDateTime)}
-                      </td>
+                        <td className="py-3.5 px-3 font-mono text-charcoal-600 dark:text-charcoal-300 whitespace-nowrap">
+                          {formatDateTime(c.collectionDateTime)}
+                        </td>
 
-                      <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
-                        {c.donorResidentName || 'Resident'}
-                      </td>
+                        <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                          {c.donorResidentName || 'Resident'}
+                        </td>
 
-                      <td className="py-3.5 px-3 text-charcoal-700 dark:text-charcoal-300">
-                        {c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation')}
-                      </td>
+                        <td className="py-3.5 px-3 text-charcoal-700 dark:text-charcoal-300">
+                          {c.type === 'ResidentBlock' ? `${c.block} - ${c.flatNumber}` : (c.category || 'Donation')}
+                        </td>
 
-                      <td className="py-3.5 px-3">
-                        <Badge variant="neutral" size="sm">{c.mode}</Badge>
-                      </td>
+                        <td className="py-3.5 px-3">
+                          <Badge variant="neutral" size="sm">{c.mode}</Badge>
+                        </td>
 
-                      <td className="py-3.5 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
-                        {formatCurrency(c.amount)}
+                        <td className="py-3.5 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                          {formatCurrency(c.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-cream-50/80 dark:bg-charcoal-900/80 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
+                      <td colSpan={5} className="py-3 px-3 text-charcoal-900 dark:text-cream-50 font-bold">
+                        Total Collections ({filteredCollections.length} entries)
+                      </td>
+                      <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
+                        +{formatCurrency(periodCollectionTotal)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-cream-50/80 dark:bg-charcoal-900/80 font-bold border-t-2 border-cream-border dark:border-charcoal-700">
-                    <td colSpan={5} className="py-3 px-3 text-charcoal-900 dark:text-cream-50 font-bold">
-                      Total Collections ({filteredCollections.length} entries)
-                    </td>
-                    <td className="py-3 px-3 text-right font-extrabold text-leaf-700 dark:text-leaf-400 font-mono text-sm">
-                      +{formatCurrency(periodCollectionTotal)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
+
+              <TablePagination
+                currentPage={colRegPage}
+                totalPages={totalColRegPages}
+                totalItems={totalColRegItems}
+                pageSize={colRegPageSize}
+                onPageChange={setColRegPage}
+                onPageSizeChange={setColRegPageSize}
+                itemLabel="entries"
+              />
             </div>
           )}
         </GlassCard>
@@ -1218,51 +1283,63 @@ export const ReportsPage: React.FC = () => {
               No flats match your filter criteria.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[650px]">
-                <thead>
-                  <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
-                    <SortableHeader label="Flat & Tower" sortKey="block" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
-                    <SortableHeader label="Resident / Owner" sortKey="ownerName" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
-                    <SortableHeader label="Phone" sortKey="ownerPhone" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
-                    <SortableHeader label="Collected (₹)" sortKey="totalCollected" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} className="text-right" />
-                    <SortableHeader label="Status" sortKey="paymentStatus" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} className="text-center" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {defSort.sortData(filteredDefaulters, defSortGetters).map((d) => {
-                    const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
-                    return (
-                      <tr
-                        key={d.id}
-                        className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
-                      >
-                        <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
-                          {d.block} · Fl {d.floor} · Flat {d.flatNumber}
-                        </td>
+            <div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[650px]">
+                  <thead>
+                    <tr className="border-b border-cream-border dark:border-charcoal-700 text-xs font-bold text-charcoal-500 dark:text-charcoal-400">
+                      <SortableHeader label="Flat & Tower" sortKey="block" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
+                      <SortableHeader label="Resident / Owner" sortKey="ownerName" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
+                      <SortableHeader label="Phone" sortKey="ownerPhone" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} />
+                      <SortableHeader label="Collected (₹)" sortKey="totalCollected" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} className="text-right" />
+                      <SortableHeader label="Status" sortKey="paymentStatus" currentSortKey={defSort.sortKey} currentSortDir={defSort.sortDirection} onSort={defSort.handleSort} className="text-center" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
+                    {paginatedDefaulters.map((d) => {
+                      const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
+                      return (
+                        <tr
+                          key={d.id}
+                          className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
+                        >
+                          <td className="py-3.5 px-3 font-bold text-charcoal-900 dark:text-cream-50">
+                            {d.block} · Fl {d.floor} · Flat {d.flatNumber}
+                          </td>
 
-                        <td className="py-3.5 px-3 font-medium text-charcoal-800 dark:text-cream-200">
-                          {d.ownerName}
-                        </td>
+                          <td className="py-3.5 px-3 font-medium text-charcoal-800 dark:text-cream-200">
+                            {d.ownerName}
+                          </td>
 
-                        <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400 font-mono">
-                          {d.ownerPhone || '—'}
-                        </td>
+                          <td className="py-3.5 px-3 text-charcoal-500 dark:text-charcoal-400 font-mono">
+                            {d.ownerPhone || '—'}
+                          </td>
 
-                        <td className="py-3.5 px-3 text-right font-bold font-mono text-leaf-700 dark:text-leaf-400">
-                          {formatCurrency(d.totalCollected || 0)}
-                        </td>
+                          <td className="py-3.5 px-3 text-right font-bold font-mono text-leaf-700 dark:text-leaf-400">
+                            {formatCurrency(d.totalCollected || 0)}
+                          </td>
 
-                        <td className="py-3.5 px-3 text-center">
-                          <Badge variant={isPaid ? 'success' : 'danger'} size="sm">
-                            {isPaid ? 'Paid' : 'Unpaid'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          <td className="py-3.5 px-3 text-center">
+                            <Badge variant={isPaid ? 'success' : 'danger'} size="sm">
+                              {isPaid ? 'Paid' : 'Unpaid'}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <TablePagination
+                currentPage={defaultersPage}
+                totalPages={totalDefaultersPages}
+                totalItems={totalDefaultersItems}
+                pageSize={defaultersPageSize}
+                onPageChange={setDefaultersPage}
+                onPageSizeChange={setDefaultersPageSize}
+                itemLabel="units"
+              />
             </div>
           )}
         </GlassCard>

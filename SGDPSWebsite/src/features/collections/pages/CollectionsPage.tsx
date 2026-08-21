@@ -14,6 +14,8 @@ import { Input } from '../../../components/ui/Input';
 import { Select } from '../../../components/ui/Select';
 import { Modal } from '../../../components/ui/Modal';
 import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
+import { TablePagination } from '../../../components/ui/TablePagination';
+import { usePagination } from '../../../hooks/usePagination';
 import { SortableHeader } from '../../../components/ui/SortableHeader';
 import { useTableSort } from '../../../hooks/useTableSort';
 import {
@@ -213,6 +215,16 @@ export const CollectionsPage: React.FC = () => {
     return sortData ? sortData(defaultSorted, collectionSortGetters) : defaultSorted;
   }, [defaultSorted, sortData, collectionSortGetters]);
 
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData: paginatedCollections,
+    setCurrentPage,
+    setPageSize,
+  } = usePagination({ data: sortedFiltered, initialPageSize: 50 });
+
   const totalFilteredAmount = useMemo(() => {
     return sortedFiltered.reduce((s, e) => s + (e.amount || 0), 0);
   }, [sortedFiltered]);
@@ -375,8 +387,13 @@ export const CollectionsPage: React.FC = () => {
           col.email === editCollectedByName
       );
 
-      const [y, m, d] = editDate.split('-').map(Number);
-      const collectionIso = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toISOString();
+      const now = new Date();
+      let collectionIso = now.toISOString();
+      if (editDate) {
+        const [y, m, d] = editDate.split('-').map(Number);
+        const entryDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        collectionIso = entryDate.toISOString();
+      }
 
       await updateCollection({
         id: collectionToEdit.id,
@@ -595,7 +612,7 @@ export const CollectionsPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedFiltered.map((c) => (
+                paginatedCollections.map((c) => (
                   <tr
                     key={c.id}
                     className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -678,6 +695,16 @@ export const CollectionsPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="entries"
+        />
       </GlassCard>
 
       {/* Edit Collection Entry Modal */}

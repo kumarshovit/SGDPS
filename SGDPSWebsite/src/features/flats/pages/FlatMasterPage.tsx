@@ -11,6 +11,8 @@ import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
 import { Modal } from '../../../components/ui/Modal';
 import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
+import { TablePagination } from '../../../components/ui/TablePagination';
+import { usePagination } from '../../../hooks/usePagination';
 import { Input } from '../../../components/ui/Input';
 import {
   Plus,
@@ -70,6 +72,16 @@ export const FlatMasterPage: React.FC = () => {
       (f.ownerPhone && f.ownerPhone.includes(searchQuery));
     return matchesBlock && matchesSearch;
   });
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData: paginatedFlats,
+    setCurrentPage,
+    setPageSize,
+  } = usePagination({ data: filteredFlats, initialPageSize: 50 });
 
   // Flat Statistics
   const totalFlats = flats.length;
@@ -269,7 +281,7 @@ export const FlatMasterPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredFlats.map((flat) => {
+                paginatedFlats.map((flat) => {
                   const isPaid = flat.paymentStatus === 'Paid' || (flat.totalCollected || 0) > 0;
                   return (
                     <tr
@@ -321,6 +333,16 @@ export const FlatMasterPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="units"
+        />
       </GlassCard>
 
       {/* Add Block Modal */}

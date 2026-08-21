@@ -13,6 +13,8 @@ import { formatCurrency, formatDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
 import { Badge } from '../../../components/ui/Badge';
+import { TablePagination } from '../../../components/ui/TablePagination';
+import { usePagination } from '../../../hooks/usePagination';
 import { Modal } from '../../../components/ui/Modal';
 import { DeleteConfirmModal } from '../../../components/ui/DeleteConfirmModal';
 import { Input } from '../../../components/ui/Input';
@@ -88,6 +90,16 @@ export const UserManagementPage: React.FC = () => {
   }), []);
 
   const sortedCollectors = sortData(filteredCollectors, collectorSortGetters);
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData: paginatedCollectors,
+    setCurrentPage,
+    setPageSize,
+  } = usePagination({ data: sortedCollectors, initialPageSize: 25 });
 
   const totalCollectors = collectors.length;
   const activeCollectors = collectors.filter((c) => c.isActive).length;
@@ -289,7 +301,7 @@ export const UserManagementPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedCollectors.map((c) => (
+                paginatedCollectors.map((c) => (
                   <tr
                     key={c.id}
                     className="hover:bg-cream-50/80 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -385,6 +397,16 @@ export const UserManagementPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="collectors"
+        />
       </GlassCard>
 
       {/* Edit Collector Name Modal */}
