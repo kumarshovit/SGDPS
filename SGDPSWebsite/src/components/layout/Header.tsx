@@ -193,20 +193,29 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         }
       }
 
-      // Sync dimensions & activate active blocks in DB
+      // Activate any existing blocks in activeBlocksList that were inactive (without overwriting their custom dimensions)
       for (const blockName of activeBlocksList) {
         const existing = dbBlocks.find((b) => b.blockName.toLowerCase() === blockName.toLowerCase());
-        const targetFloors = floorsPerBlock > 0 ? floorsPerBlock : (existing?.floors || 18);
-        const targetFlats = flatsPerFloor > 0 ? flatsPerFloor : (existing?.flatsPerFloor || 7);
-        try {
-          await createBlock({
-            blockName,
-            floors: targetFloors > 0 ? targetFloors : 18,
-            flatsPerFloor: targetFlats > 0 ? targetFlats : 7,
-            expectedAmount: 0,
-          }).unwrap();
-        } catch {
-          // continue
+        if (existing) {
+          if (!existing.isActive) {
+            try {
+              await toggleBlockStatus({ blockName, isActive: true }).unwrap();
+            } catch {
+              // continue
+            }
+          }
+        } else {
+          // Legacy block not yet in dbBlocks table
+          try {
+            await createBlock({
+              blockName,
+              floors: floorsPerBlock > 0 ? floorsPerBlock : 18,
+              flatsPerFloor: flatsPerFloor > 0 ? flatsPerFloor : 7,
+              expectedAmount: 0,
+            }).unwrap();
+          } catch {
+            // continue
+          }
         }
       }
 

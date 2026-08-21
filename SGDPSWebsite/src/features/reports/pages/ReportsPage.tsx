@@ -18,7 +18,7 @@ import { usePagination } from '../../../hooks/usePagination';
 import { SortableHeader } from '../../../components/ui/SortableHeader';
 import { useTableSort } from '../../../hooks/useTableSort';
 import { Collection } from '../../collections/types';
-import { Expense } from '../../expenses/types';
+import { Expense, DEFAULT_EXPENSE_CATEGORIES } from '../../expenses/types';
 import { Flat } from '../../flats/types';
 import {
   FileSpreadsheet,
@@ -327,9 +327,9 @@ export const ReportsPage: React.FC = () => {
       .sort((a, b) => b.total - a.total);
   }, [filteredExpenses, periodExpenseTotal]);
 
-  // Available Filter Options derived from data
+  // Available Filter Options derived from predefined categories + any custom categories in data
   const availableCategories = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>(DEFAULT_EXPENSE_CATEGORIES);
     for (const e of expenses) {
       if (e.category) set.add(e.category);
     }

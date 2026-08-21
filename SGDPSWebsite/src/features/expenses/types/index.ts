@@ -1,5 +1,19 @@
 import { PaymentMode } from '../../collections/types';
 
+export const DEFAULT_EXPENSE_CATEGORIES = [
+  'Decoration & Pandal',
+  'Puja Materials & Samagri',
+  'Bhog, Prasad & Catering',
+  'Electricity & Sound System',
+  'Security & Guards',
+  'Sanitation & Cleaning',
+  'Priest Dakshina',
+  'Printing & Banners',
+  'Cultural Events & Stage',
+  'Maintenance & Repairs',
+  'Miscellaneous',
+];
+
 export interface Expense {
   id: number;
   expenseDate: string;

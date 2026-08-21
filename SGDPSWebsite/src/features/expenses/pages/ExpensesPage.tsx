@@ -6,7 +6,7 @@ import {
   useUpdateExpenseMutation,
   useDeleteExpenseMutation,
 } from '../api/expenseApiSlice';
-import { Expense } from '../types';
+import { Expense, DEFAULT_EXPENSE_CATEGORIES } from '../types';
 import { formatCurrency, formatDateTime } from '../../../utils/formatters';
 import { GlassCard } from '../../../components/ui/GlassCard';
 import { Button } from '../../../components/ui/Button';
@@ -37,19 +37,7 @@ import { usePagination } from '../../../hooks/usePagination';
 import { SortableHeader } from '../../../components/ui/SortableHeader';
 import { useTableSort } from '../../../hooks/useTableSort';
 
-const EXPENSE_CATEGORIES = [
-  'Decoration & Pandal',
-  'Puja Materials & Samagri',
-  'Bhog, Prasad & Catering',
-  'Electricity & Sound System',
-  'Security & Guards',
-  'Sanitation & Cleaning',
-  'Priest Dakshina',
-  'Printing & Banners',
-  'Cultural Events & Stage',
-  'Maintenance & Repairs',
-  'Miscellaneous',
-];
+const EXPENSE_CATEGORIES = DEFAULT_EXPENSE_CATEGORIES;
 
 export const ExpensesPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
