@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { exportExpensesToExcel } from '../../../utils/exportHelpers';
 import { PaymentMode } from '../../collections/types';
+import { TablePagination } from '../../../components/ui/TablePagination';
+import { usePagination } from '../../../hooks/usePagination';
 import { SortableHeader } from '../../../components/ui/SortableHeader';
 import { useTableSort } from '../../../hooks/useTableSort';
 
@@ -108,6 +110,16 @@ export const ExpensesPage: React.FC = () => {
   }), []);
 
   const sortedExpenses = sortData(filteredExpenses, expenseSortGetters);
+
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    totalItems,
+    paginatedData: paginatedExpenses,
+    setCurrentPage,
+    setPageSize,
+  } = usePagination({ data: sortedExpenses, initialPageSize: 50 });
 
   const totalExpenseAmount = sortedExpenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -459,7 +471,7 @@ export const ExpensesPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                sortedExpenses.map((exp) => (
+                paginatedExpenses.map((exp) => (
                   <tr
                     key={exp.id}
                     className="hover:bg-cream-50/60 dark:hover:bg-charcoal-700/40 transition-colors"
@@ -553,6 +565,16 @@ export const ExpensesPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          itemLabel="expenses"
+        />
       </GlassCard>
 
       {/* Record Expense Modal */}
