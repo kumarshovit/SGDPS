@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,7 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> with Wi
   DatePreset _datePreset = DatePreset.today;
   DateTimeRange? _customDateRange;
   String _typeFilter = 'All'; // 'All', 'ResidentBlock', 'SponsorshipOther'
+  Timer? _autoRefreshTimer;
 
   @override
   void initState() {
@@ -32,11 +34,27 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> with Wi
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
+      _startAutoRefresh();
     });
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) {
+        _loadData(silent: true);
+      }
+    });
+  }
+
+  void _stopAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = null;
   }
 
   @override
   void dispose() {
+    _stopAutoRefresh();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -44,19 +62,22 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> with Wi
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && mounted) {
-      _loadData();
+      _loadData(silent: true);
+      _startAutoRefresh();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _stopAutoRefresh();
     }
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadData({bool silent = false}) async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final isActive = await auth.verifyAccountStatus();
     if (!isActive || !mounted) return;
 
     await Future.wait([
       Provider.of<CollectionProvider>(context, listen: false)
-          .fetchCollections(),
-      Provider.of<FlatProvider>(context, listen: false).fetchFlats(),
+          .fetchCollections(silent: silent),
+      Provider.of<FlatProvider>(context, listen: false).fetchFlats(silent: silent),
     ]);
   }
 

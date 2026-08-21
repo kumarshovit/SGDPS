@@ -14,10 +14,12 @@ class FlatProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<void> fetchFlats() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<void> fetchFlats({bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     try {
       final response = await ApiClient.get(ApiConstants.flats);
@@ -25,15 +27,20 @@ class FlatProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final List<dynamic> list = jsonDecode(response.body);
         _flats = list.map((e) => FlatModel.fromJson(e as Map<String, dynamic>)).toList();
+        _errorMessage = null;
         debugPrint('FETCHED ${_flats.length} FLATS');
-      } else {
+      } else if (!silent) {
         _errorMessage = 'Failed to load flats (${response.statusCode})';
       }
     } catch (e, stack) {
       debugPrint('FETCH FLATS ERROR: $e\n$stack');
-      _errorMessage = 'Network connection failed';
+      if (!silent) {
+        _errorMessage = 'Network connection failed';
+      }
     } finally {
-      _isLoading = false;
+      if (!silent) {
+        _isLoading = false;
+      }
       notifyListeners();
     }
   }

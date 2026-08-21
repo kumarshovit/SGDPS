@@ -113,10 +113,12 @@ class CollectionProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> fetchCollections({String? collectorId}) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<void> fetchCollections({String? collectorId, bool silent = false}) async {
+    if (!silent) {
+      _isLoading = true;
+      _errorMessage = null;
+      notifyListeners();
+    }
 
     try {
       final response = await ApiClient.get(ApiConstants.collections);
@@ -126,15 +128,20 @@ class CollectionProvider extends ChangeNotifier {
         _collections = list
             .map((e) => CollectionModel.fromJson(e as Map<String, dynamic>))
             .toList();
+        _errorMessage = null;
         debugPrint('FETCHED ${_collections.length} COLLECTIONS');
-      } else {
+      } else if (!silent) {
         _errorMessage = 'Failed to load history (${response.statusCode})';
       }
     } catch (e, stack) {
       debugPrint('FETCH COLLECTIONS ERROR: $e\n$stack');
-      _errorMessage = 'Network connection failed';
+      if (!silent) {
+        _errorMessage = 'Network connection failed';
+      }
     } finally {
-      _isLoading = false;
+      if (!silent) {
+        _isLoading = false;
+      }
       notifyListeners();
     }
   }
