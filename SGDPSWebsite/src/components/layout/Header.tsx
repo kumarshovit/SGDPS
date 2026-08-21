@@ -196,8 +196,8 @@ export const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
       // Sync dimensions & activate active blocks in DB
       for (const blockName of activeBlocksList) {
         const existing = dbBlocks.find((b) => b.blockName.toLowerCase() === blockName.toLowerCase());
-        const targetFloors = existing?.floors && existing.floors > floorsPerBlock ? existing.floors : floorsPerBlock;
-        const targetFlats = existing?.flatsPerFloor && existing.flatsPerFloor > flatsPerFloor ? existing.flatsPerFloor : flatsPerFloor;
+        const targetFloors = floorsPerBlock > 0 ? floorsPerBlock : (existing?.floors || 18);
+        const targetFlats = flatsPerFloor > 0 ? flatsPerFloor : (existing?.flatsPerFloor || 7);
         try {
           await createBlock({
             blockName,

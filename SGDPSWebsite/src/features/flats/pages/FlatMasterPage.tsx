@@ -106,18 +106,7 @@ export const FlatMasterPage: React.FC = () => {
 
     const formatted = formatBlockName(raw);
 
-    const isDuplicate = availableBlocks.some(
-      (b) => b.toLowerCase() === formatted.toLowerCase() || b.toLowerCase() === raw.toLowerCase()
-    );
-
-    if (isDuplicate) {
-      setBlockError(`Block "${formatted}" already exists in society.`);
-      return;
-    }
-
     try {
-      const floors = getGlobalFloorsPerBlock();
-      const flatsPerFloor = getGlobalFlatsPerFloor();
       await createBlock({
         blockName: formatted,
         floors: floorsToCreate > 0 ? floorsToCreate : 18,
@@ -129,7 +118,7 @@ export const FlatMasterPage: React.FC = () => {
       setBlockNameToCreate('');
       setSelectedBlock(formatted);
     } catch (err: any) {
-      setBlockError(err?.data?.detail || 'Failed to create block');
+      setBlockError(err?.data?.detail || 'Failed to configure block');
     }
   };
 
@@ -345,13 +334,13 @@ export const FlatMasterPage: React.FC = () => {
         />
       </GlassCard>
 
-      {/* Add Block Modal */}
+      {/* Add / Reconfigure Block Modal */}
       {isAddBlockModalOpen && (
         <Modal
           isOpen={isAddBlockModalOpen}
           onClose={() => setIsAddBlockModalOpen(false)}
-          title="Register New Block / Tower"
-          subtitle="Configure block dimensions to automatically generate unit numbers for instant tracking"
+          title="Register or Reconfigure Block / Tower"
+          subtitle="Configure or update block dimensions to automatically generate unit numbers for instant tracking"
         >
           <form onSubmit={handleCreateBlockSubmit} className="space-y-4">
             <div className="space-y-1.5">
@@ -422,7 +411,7 @@ export const FlatMasterPage: React.FC = () => {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" isLoading={isCreatingBlock}>
-                Create Block & {floorsToCreate * flatsPerFloorToCreate} Flats
+                Save Block & {floorsToCreate * flatsPerFloorToCreate} Units
               </Button>
             </div>
           </form>

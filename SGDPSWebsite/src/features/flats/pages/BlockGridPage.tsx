@@ -121,47 +121,32 @@ export const BlockGridPage: React.FC = () => {
 
   const blockData = gridData[activeBlock] || {};
 
-  // Compute floors dynamically based on actual flats in DB or block metadata (ordered 1 to 18 ascending)
-  const floors = useMemo(() => {
-    if (blockFlats.length > 0) {
-      const distinctFloors = Array.from(new Set(blockFlats.map((f) => f.floor))).sort((a, b) => a - b);
-      if (distinctFloors.length > 0) return distinctFloors;
-    }
-    const dbBlock = dbBlocks.find((b) => b.blockName.toLowerCase() === activeBlock.toLowerCase());
-    const configuredFloors = dbBlock?.floors || (globalFloors && globalFloors > 0 ? globalFloors : 18);
-    return Array.from({ length: configuredFloors }, (_, i) => i + 1);
-  }, [blockFlats, dbBlocks, activeBlock, globalFloors]);
+  // Find database configuration for active block
+  const dbBlock = useMemo(() => {
+    return dbBlocks.find((b) => b.blockName.toLowerCase() === activeBlock.toLowerCase());
+  }, [dbBlocks, activeBlock]);
 
-  // Compute flat unit numbers dynamically based on actual flats in DB or block metadata
+  // Compute floors strictly based on the configured block dimensions
+  const floors = useMemo(() => {
+    const configuredFloors =
+      dbBlock?.floors && dbBlock.floors > 0
+        ? dbBlock.floors
+        : globalFloors && globalFloors > 0
+        ? globalFloors
+        : 18;
+    return Array.from({ length: configuredFloors }, (_, i) => i + 1);
+  }, [dbBlock, globalFloors]);
+
+  // Compute flats strictly based on the configured block dimensions
   const flats = useMemo(() => {
-    if (blockFlats.length > 0) {
-      let maxFlatNum = 0;
-      for (const f of blockFlats) {
-        const digits = f.flatNumber.replace(/\D/g, '');
-        let unit = 1;
-        if (digits.length >= 3) {
-          unit = parseInt(digits.slice(-2), 10) || parseInt(digits.slice(-1), 10) || 1;
-        } else if (digits.length > 0) {
-          unit = parseInt(digits, 10) || 1;
-        }
-        if (unit > maxFlatNum) maxFlatNum = unit;
-      }
-      // Also check max count of flats on any floor
-      const countsByFloor = new Map<number, number>();
-      for (const f of blockFlats) {
-        countsByFloor.set(f.floor, (countsByFloor.get(f.floor) || 0) + 1);
-      }
-      for (const count of countsByFloor.values()) {
-        if (count > maxFlatNum) maxFlatNum = count;
-      }
-      if (maxFlatNum > 0) {
-        return Array.from({ length: maxFlatNum }, (_, i) => i + 1);
-      }
-    }
-    const dbBlock = dbBlocks.find((b) => b.blockName.toLowerCase() === activeBlock.toLowerCase());
-    const configuredFlats = dbBlock?.flatsPerFloor || (globalFlats && globalFlats > 0 ? globalFlats : 7);
+    const configuredFlats =
+      dbBlock?.flatsPerFloor && dbBlock.flatsPerFloor > 0
+        ? dbBlock.flatsPerFloor
+        : globalFlats && globalFlats > 0
+        ? globalFlats
+        : 7;
     return Array.from({ length: configuredFlats }, (_, i) => i + 1);
-  }, [blockFlats, dbBlocks, activeBlock, globalFlats]);
+  }, [dbBlock, globalFlats]);
 
   // Block Totals & Counts
   const { blockTotal, paidCount, totalUnits, pct } = useMemo(() => {
