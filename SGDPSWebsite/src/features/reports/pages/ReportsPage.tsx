@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   useGetDefaultersQuery,
   useGetDateWiseReportQuery,
@@ -33,6 +33,10 @@ import {
   CheckCircle2,
   Users,
   UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import {
   exportToExcel,
@@ -67,6 +71,13 @@ export const ReportsPage: React.FC = () => {
   const [selectedBlock, setSelectedBlock] = useState('ALL');
   const [selectedCollector, setSelectedCollector] = useState('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [defaultersPage, setDefaultersPage] = useState(1);
+  const [defaultersPageSize, setDefaultersPageSize] = useState<number>(50);
+
+  // Reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setDefaultersPage(1);
+  }, [selectedBlock, searchQuery, datePreset, fromDate, toDate]);
 
   // Queries
   const { data: defaulters = [], isLoading: isDefaultersLoading } = useGetDefaultersQuery();
@@ -212,19 +223,36 @@ export const ReportsPage: React.FC = () => {
     });
   }, [expenses, datePreset, fromDate, toDate, selectedCategory, selectedPaymentMode, searchQuery]);
 
-  // Filtered Flats for Paid & Unpaid Status Report
+  // Filtered Flats for Paid & Unpaid Status Report (Active Only + High-Performance Search)
   const filteredDefaulters = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const isBlockFiltered = selectedBlock !== 'ALL';
+
     return flats.filter((d) => {
-      if (selectedBlock !== 'ALL' && d.block !== selectedBlock) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      // 1. Exclude inactive flats
+      if (d.isActive === false) return false;
+
+      // 2. Block Filter
+      if (isBlockFiltered && d.block !== selectedBlock) return false;
+
+      // 3. Fast Search Filter
+      if (q) {
+        const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
+        const status = isPaid ? 'paid' : 'unpaid';
         const name = (d.ownerName || '').toLowerCase();
         const blk = (d.block || '').toLowerCase();
         const flatNo = String(d.flatNumber || '').toLowerCase();
-        const phone = (d.ownerPhone || '').toLowerCase();
-        const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
-        const status = isPaid ? 'paid' : 'unpaid';
-        if (!name.includes(q) && !blk.includes(q) && !flatNo.includes(q) && !phone.includes(q) && !status.includes(q)) return false;
+        const phone = d.ownerPhone || '';
+
+        if (
+          !name.includes(q) &&
+          !blk.includes(q) &&
+          !flatNo.includes(q) &&
+          !phone.includes(q) &&
+          !status.includes(q)
+        ) {
+          return false;
+        }
       }
       return true;
     });
@@ -242,6 +270,22 @@ export const ReportsPage: React.FC = () => {
     () => filteredDefaulters.reduce((s, f) => s + (f.totalCollected || 0), 0),
     [filteredDefaulters]
   );
+
+  // Sorted and Paginated Flats for Fast Rendering
+  const sortedDefaulters = useMemo(() => {
+    return defSort.sortData(filteredDefaulters, defSortGetters);
+  }, [filteredDefaulters, defSort, defSortGetters]);
+
+  const totalDefaultersPages = useMemo(() => {
+    if (defaultersPageSize <= 0) return 1;
+    return Math.max(1, Math.ceil(sortedDefaulters.length / defaultersPageSize));
+  }, [sortedDefaulters.length, defaultersPageSize]);
+
+  const paginatedDefaulters = useMemo(() => {
+    if (defaultersPageSize <= 0) return sortedDefaulters;
+    const start = (defaultersPage - 1) * defaultersPageSize;
+    return sortedDefaulters.slice(start, start + defaultersPageSize);
+  }, [sortedDefaulters, defaultersPage, defaultersPageSize]);
 
   // Financial Metrics (Calculated dynamically on Filtered Period)
   const periodCollectionTotal = useMemo(
@@ -286,7 +330,7 @@ export const ReportsPage: React.FC = () => {
   const availableBlocks = useMemo(() => {
     const set = new Set<string>();
     for (const f of flats) {
-      if (f.block) set.add(f.block);
+      if (f.isActive !== false && f.block) set.add(f.block);
     }
     for (const c of collections) {
       if (c.block) set.add(c.block);
@@ -1230,7 +1274,7 @@ export const ReportsPage: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-cream-100 dark:divide-charcoal-700/60 text-xs">
-                  {defSort.sortData(filteredDefaulters, defSortGetters).map((d) => {
+                  {paginatedDefaulters.map((d) => {
                     const isPaid = d.paymentStatus === 'Paid' || (d.totalCollected || 0) > 0;
                     return (
                       <tr
@@ -1263,6 +1307,93 @@ export const ReportsPage: React.FC = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Modern Responsive Pagination Footer */}
+          {filteredDefaulters.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 mt-2 border-t border-cream-100 dark:border-charcoal-700/60 text-xs">
+              <div className="flex items-center gap-2 text-charcoal-500 dark:text-charcoal-400 flex-wrap">
+                <span>Showing</span>
+                <span className="font-bold text-charcoal-800 dark:text-cream-100 font-mono">
+                  {defaultersPageSize <= 0
+                    ? `1 - ${filteredDefaulters.length}`
+                    : `${(defaultersPage - 1) * defaultersPageSize + 1} - ${Math.min(defaultersPage * defaultersPageSize, filteredDefaulters.length)}`}
+                </span>
+                <span>of</span>
+                <span className="font-bold text-charcoal-800 dark:text-cream-100 font-mono">{filteredDefaulters.length}</span>
+                <span>units</span>
+
+                <span className="mx-1 text-charcoal-300 dark:text-charcoal-600 hidden sm:inline">|</span>
+
+                <span className="text-charcoal-400">Rows per page:</span>
+                <select
+                  value={defaultersPageSize}
+                  onChange={(e) => {
+                    setDefaultersPageSize(Number(e.target.value));
+                    setDefaultersPage(1);
+                  }}
+                  className="bg-cream-100 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 text-charcoal-800 dark:text-cream-100 rounded-lg px-2 py-1 text-xs focus:ring-1 focus:ring-saffron-500 outline-none cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={-1}>All ({filteredDefaulters.length})</option>
+                </select>
+              </div>
+
+              {defaultersPageSize > 0 && totalDefaultersPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDefaultersPage(1)}
+                    disabled={defaultersPage === 1}
+                    className="p-1.5 h-8 w-8 min-w-0"
+                    title="First Page"
+                  >
+                    <ChevronsLeft size={14} />
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDefaultersPage((p) => Math.max(1, p - 1))}
+                    disabled={defaultersPage === 1}
+                    className="p-1.5 h-8 w-8 min-w-0"
+                    title="Previous Page"
+                  >
+                    <ChevronLeft size={14} />
+                  </Button>
+
+                  <div className="px-3 py-1 font-mono font-bold text-xs bg-cream-100 dark:bg-charcoal-900 border border-cream-border dark:border-charcoal-700 rounded-lg text-charcoal-800 dark:text-cream-100">
+                    Page {defaultersPage} of {totalDefaultersPages}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDefaultersPage((p) => Math.min(totalDefaultersPages, p + 1))}
+                    disabled={defaultersPage === totalDefaultersPages}
+                    className="p-1.5 h-8 w-8 min-w-0"
+                    title="Next Page"
+                  >
+                    <ChevronRight size={14} />
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDefaultersPage(totalDefaultersPages)}
+                    disabled={defaultersPage === totalDefaultersPages}
+                    className="p-1.5 h-8 w-8 min-w-0"
+                    title="Last Page"
+                  >
+                    <ChevronsRight size={14} />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </GlassCard>

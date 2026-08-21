@@ -64,8 +64,8 @@ public class GetDashboardKpisEndpoint(AppDbContext db) : EndpointWithoutRequest<
   public override async Task<Results<Ok<DashboardKpisResponse>, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
   {
     var collections = await db.PaymentCollections.AsNoTracking().ToListAsync(ct);
-    var expenses = await db.Expenses.AsNoTracking().ToListAsync(ct);
-    var flats = await db.Flats.AsNoTracking().ToListAsync(ct);
+    var expenses = await db.Expenses.AsNoTracking().Where(e => !e.IsDeleted).ToListAsync(ct);
+    var flats = await db.Flats.AsNoTracking().Where(f => f.IsActive).ToListAsync(ct);
 
     decimal totalCollection = collections.Sum(c => c.Amount);
     decimal cashInflow = collections.Where(c => c.Mode == PaymentMode.Cash).Sum(c => c.Amount);
@@ -161,7 +161,7 @@ public class GetDashboardKpisEndpoint(AppDbContext db) : EndpointWithoutRequest<
         e.Amount,
         e.PaymentMode.ToString(),
         e.PaidToVendor,
-        e.BillAttachmentUrl,
+        !string.IsNullOrWhiteSpace(e.BillAttachmentUrl) ? $"/api/expenses/{e.Id}/attachment" : null,
         e.Remarks,
         e.RecordedByUserId,
         e.RecordedByName,

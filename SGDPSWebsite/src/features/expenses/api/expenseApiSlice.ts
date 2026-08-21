@@ -21,6 +21,9 @@ export const expenseApiSlice = baseApi.injectEndpoints({
       query: () => '/expenses/category-summary',
       providesTags: ['Expenses'],
     }),
+    getExpenseAttachment: builder.query<{ id: number; billAttachmentUrl?: string }, number>({
+      query: (id) => `/expenses/${id}/attachment`,
+    }),
     createExpense: builder.mutation<Expense, CreateExpenseInput>({
       query: (body) => ({
         url: '/expenses',
@@ -50,6 +53,8 @@ export const expenseApiSlice = baseApi.injectEndpoints({
 export const {
   useGetExpensesQuery,
   useGetExpenseCategorySummaryQuery,
+  useGetExpenseAttachmentQuery,
+  useLazyGetExpenseAttachmentQuery,
   useCreateExpenseMutation,
   useUpdateExpenseMutation,
   useDeleteExpenseMutation,

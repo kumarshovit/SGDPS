@@ -53,6 +53,8 @@ public record ExpenseCategorySummary(
   decimal TotalAmount,
   int Count);
 
+public record ExpenseAttachmentDto(int Id, string? BillAttachmentUrl);
+
 // GET /api/expenses
 public class ListExpensesEndpoint(AppDbContext db) : Endpoint<ListExpensesQuery, Results<Ok<List<ExpenseDto>>, ProblemHttpResult>>
 {
@@ -66,7 +68,7 @@ public class ListExpensesEndpoint(AppDbContext db) : Endpoint<ListExpensesQuery,
 
   public override async Task<Results<Ok<List<ExpenseDto>>, ProblemHttpResult>> ExecuteAsync(ListExpensesQuery req, CancellationToken ct)
   {
-    var query = db.Expenses.AsNoTracking().AsQueryable();
+    var query = db.Expenses.AsNoTracking().Where(e => !e.IsDeleted).AsQueryable();
 
     if (!string.IsNullOrWhiteSpace(req.Category))
       query = query.Where(e => e.Category == req.Category);
@@ -87,9 +89,25 @@ public class ListExpensesEndpoint(AppDbContext db) : Endpoint<ListExpensesQuery,
         (e.Remarks != null && e.Remarks.ToLower().Contains(s)));
     }
 
+    // Lightweight projection: excludes heavy BillAttachmentUrl column from SQL query
     var items = await query
       .OrderByDescending(e => e.ExpenseDate)
       .ThenByDescending(e => e.Id)
+      .Select(e => new
+      {
+        e.Id,
+        e.ExpenseDate,
+        e.Category,
+        e.Description,
+        e.Amount,
+        e.PaymentMode,
+        e.PaidToVendor,
+        HasAttachment = !string.IsNullOrWhiteSpace(e.BillAttachmentUrl),
+        e.Remarks,
+        e.RecordedByUserId,
+        e.RecordedByName,
+        e.CreatedAt
+      })
       .ToListAsync(ct);
 
     var list = items.Select(e => new ExpenseDto(
@@ -100,13 +118,39 @@ public class ListExpensesEndpoint(AppDbContext db) : Endpoint<ListExpensesQuery,
       e.Amount,
       e.PaymentMode.ToString(),
       e.PaidToVendor,
-      e.BillAttachmentUrl,
+      e.HasAttachment ? $"/api/expenses/{e.Id}/attachment" : null,
       e.Remarks,
       e.RecordedByUserId,
       e.RecordedByName,
       DateTime.SpecifyKind(e.CreatedAt, DateTimeKind.Utc))).ToList();
 
     return TypedResults.Ok(list);
+  }
+}
+
+// GET /api/expenses/{id}/attachment
+public class GetExpenseAttachmentEndpoint(AppDbContext db) : EndpointWithoutRequest<Results<Ok<ExpenseAttachmentDto>, NotFound, ProblemHttpResult>>
+{
+  public override void Configure()
+  {
+    Get("/expenses/{id:int}/attachment");
+    AllowAnonymous();
+    Tags("Expenses");
+    Summary(s => s.Summary = "Get full bill attachment data for an expense item on-demand");
+  }
+
+  public override async Task<Results<Ok<ExpenseAttachmentDto>, NotFound, ProblemHttpResult>> ExecuteAsync(CancellationToken ct)
+  {
+    var id = Route<int>("id");
+    var expense = await db.Expenses.AsNoTracking()
+      .Where(e => e.Id == id && !e.IsDeleted)
+      .Select(e => new { e.Id, e.BillAttachmentUrl })
+      .FirstOrDefaultAsync(ct);
+
+    if (expense == null || string.IsNullOrWhiteSpace(expense.BillAttachmentUrl))
+      return TypedResults.NotFound();
+
+    return TypedResults.Ok(new ExpenseAttachmentDto(expense.Id, expense.BillAttachmentUrl));
   }
 }
 

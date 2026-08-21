@@ -375,8 +375,13 @@ export const CollectionsPage: React.FC = () => {
           col.email === editCollectedByName
       );
 
-      const [y, m, d] = editDate.split('-').map(Number);
-      const collectionIso = new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toISOString();
+      const now = new Date();
+      let collectionIso = now.toISOString();
+      if (editDate) {
+        const [y, m, d] = editDate.split('-').map(Number);
+        const entryDate = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        collectionIso = entryDate.toISOString();
+      }
 
       await updateCollection({
         id: collectionToEdit.id,
