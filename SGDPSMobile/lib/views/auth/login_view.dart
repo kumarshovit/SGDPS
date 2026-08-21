@@ -4,8 +4,6 @@ import '../../core/constants/colors.dart';
 import '../../providers/auth_provider.dart';
 import '../dashboard/collector_dashboard_view.dart';
 
-enum AuthMode { login, forgot, reset }
-
 class LoginView extends StatefulWidget {
   const LoginView({Key? key}) : super(key: key);
 
@@ -15,20 +13,15 @@ class LoginView extends StatefulWidget {
 
 class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
-  AuthMode _mode = AuthMode.login;
 
   // Controllers
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _resetTokenController = TextEditingController();
-  final _newPasswordController = TextEditingController();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _resetTokenController.dispose();
-    _newPasswordController.dispose();
     super.dispose();
   }
 
@@ -45,46 +38,6 @@ class _LoginViewState extends State<LoginView> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const CollectorDashboardView()),
       );
-    }
-  }
-
-  void _handleForgotPassword() async {
-    if (_emailController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your email address')),
-      );
-      return;
-    }
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.forgotPassword(_emailController.text.trim());
-
-    if (success && mounted) {
-      final token = authProvider.generatedResetToken;
-      if (token != null && token.isNotEmpty) {
-        _resetTokenController.text = token;
-      }
-      setState(() {
-        _mode = AuthMode.reset;
-      });
-    }
-  }
-
-  void _handleResetPassword() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.resetPassword(
-      email: _emailController.text.trim(),
-      resetToken: _resetTokenController.text.trim(),
-      newPassword: _newPasswordController.text.trim(),
-    );
-
-    if (success && mounted) {
-      setState(() {
-        _mode = AuthMode.login;
-        _passwordController.text = _newPasswordController.text.trim();
-      });
     }
   }
 
@@ -197,120 +150,27 @@ class _LoginViewState extends State<LoginView> {
                           ),
                         ),
 
-                      // MODE 1: LOGIN
-                      if (_mode == AuthMode.login) ...[
-                        _buildInputField(
-                          controller: _emailController,
-                          label: 'Collector Email',
-                          icon: Icons.email_outlined,
-                          validator: (v) => v!.isEmpty ? 'Email is required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          controller: _passwordController,
-                          label: 'Password',
-                          icon: Icons.lock_outline,
-                          obscure: true,
-                          validator: (v) => v!.isEmpty ? 'Password is required' : null,
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: () => setState(() => _mode = AuthMode.forgot),
-                            child: const Text(
-                              'Forgot Password?',
-                              style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildPrimaryButton(
-                          label: 'Sign In as Collector',
-                          isLoading: auth.isLoading,
-                          onPressed: _handleLogin,
-                        ),
-                      ],
-
-                      // MODE 2: FORGOT PASSWORD
-                      if (_mode == AuthMode.forgot) ...[
-                        const Text(
-                          'Enter your registered email to request a reset token.',
-                          style: TextStyle(fontSize: 12, color: AppColors.inkMuted),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          controller: _emailController,
-                          label: 'Registered Email',
-                          icon: Icons.email_outlined,
-                          validator: (v) => v!.isEmpty ? 'Email required' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPrimaryButton(
-                          label: 'Request Reset Token',
-                          isLoading: auth.isLoading,
-                          onPressed: _handleForgotPassword,
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            TextButton(
-                              onPressed: () => setState(() => _mode = AuthMode.login),
-                              child: const Text(
-                                '‹ Back to Sign In',
-                                style: TextStyle(fontSize: 11, color: AppColors.inkMuted, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: () => setState(() => _mode = AuthMode.reset),
-                              child: const Text(
-                                'Have a token? Reset here',
-                                style: TextStyle(fontSize: 11, color: AppColors.saffron, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-
-                      // MODE 3: RESET PASSWORD
-                      if (_mode == AuthMode.reset) ...[
-                        _buildInputField(
-                          controller: _emailController,
-                          label: 'Registered Email',
-                          icon: Icons.email_outlined,
-                          validator: (v) => v!.isEmpty ? 'Email required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          controller: _resetTokenController,
-                          label: 'Reset Token',
-                          icon: Icons.key_outlined,
-                          validator: (v) => v!.isEmpty ? 'Token required' : null,
-                        ),
-                        const SizedBox(height: 12),
-                        _buildInputField(
-                          controller: _newPasswordController,
-                          label: 'New Password',
-                          icon: Icons.lock_reset_outlined,
-                          obscure: true,
-                          validator: (v) => v!.isEmpty ? 'New password required' : null,
-                        ),
-                        const SizedBox(height: 16),
-                        _buildPrimaryButton(
-                          label: 'Confirm New Password',
-                          isLoading: auth.isLoading,
-                          onPressed: _handleResetPassword,
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: () => setState(() => _mode = AuthMode.login),
-                          child: const Text(
-                            '‹ Back to Sign In',
-                            style: TextStyle(fontSize: 11, color: AppColors.inkMuted, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
+                      // LOGIN FORM
+                      _buildInputField(
+                        controller: _emailController,
+                        label: 'Collector Email',
+                        icon: Icons.email_outlined,
+                        validator: (v) => v!.isEmpty ? 'Email is required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildInputField(
+                        controller: _passwordController,
+                        label: 'Password',
+                        icon: Icons.lock_outline,
+                        obscure: true,
+                        validator: (v) => v!.isEmpty ? 'Password is required' : null,
+                      ),
+                      const SizedBox(height: 20),
+                      _buildPrimaryButton(
+                        label: 'Sign In as Collector',
+                        isLoading: auth.isLoading,
+                        onPressed: _handleLogin,
+                      ),
 
                       const SizedBox(height: 8),
                     ],

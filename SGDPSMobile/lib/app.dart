@@ -7,6 +7,8 @@ import 'providers/collection_provider.dart';
 import 'providers/flat_provider.dart';
 import 'views/splash/splash_view.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class SgdpsMobileApp extends StatelessWidget {
   const SgdpsMobileApp({Key? key}) : super(key: key);
 
@@ -19,6 +21,7 @@ class SgdpsMobileApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CollectionProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         title: 'SGDPS Field Collector',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(

@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import '../services/storage_service.dart';
 
 class ApiClient {
+  static VoidCallback? onUnauthorized;
+
   static Future<Map<String, String>> _getHeaders({bool includeContentType = false}) async {
     final token = await StorageService.getToken();
     final headers = <String, String>{
@@ -25,6 +27,9 @@ class ApiClient {
     debugPrint('API GET: $url');
     final response = await http.get(Uri.parse(url), headers: headers);
     debugPrint('API GET response [${response.statusCode}] from $url');
+    if (response.statusCode == 401 && !url.contains('/auth/login')) {
+      onUnauthorized?.call();
+    }
     return response;
   }
 
@@ -37,6 +42,9 @@ class ApiClient {
       body: jsonEncode(body),
     );
     debugPrint('API POST response [${response.statusCode}] from $url');
+    if (response.statusCode == 401 && !url.contains('/auth/login')) {
+      onUnauthorized?.call();
+    }
     return response;
   }
 }

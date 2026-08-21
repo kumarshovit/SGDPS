@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../app.dart';
 import '../core/constants/api_constants.dart';
 import '../core/network/api_client.dart';
 import '../core/services/storage_service.dart';
 import '../models/user_model.dart';
+import '../views/auth/login_view.dart';
 
 class AuthProvider extends ChangeNotifier {
   UserModel? _user;
@@ -11,6 +14,15 @@ class AuthProvider extends ChangeNotifier {
   String? _errorMessage;
   String? _successMessage;
   String? _generatedResetToken;
+  Timer? _heartbeatTimer;
+
+  AuthProvider() {
+    ApiClient.onUnauthorized = () {
+      if (_user != null) {
+        logout(reason: 'Password or account permissions updated by admin. Please sign in again.');
+      }
+    };
+  }
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
@@ -18,6 +30,20 @@ class AuthProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
   String? get generatedResetToken => _generatedResetToken;
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (_user != null) {
+        await verifyAccountStatus();
+      }
+    });
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
 
   Future<bool> tryAutoLogin() async {
     try {
@@ -33,6 +59,7 @@ class AuthProvider extends ChangeNotifier {
             if (user.isActive) {
               _user = user;
               await StorageService.saveUser(jsonEncode(data));
+              _startHeartbeat();
               notifyListeners();
               return true;
             }
@@ -45,6 +72,7 @@ class AuthProvider extends ChangeNotifier {
           final cachedUser = UserModel.fromJson(jsonDecode(userJson));
           if (cachedUser.isActive) {
             _user = cachedUser;
+            _startHeartbeat();
             notifyListeners();
             return true;
           }
@@ -67,15 +95,15 @@ class AuthProvider extends ChangeNotifier {
         final user = UserModel.fromJson(data);
         if (!user.isActive) {
           debugPrint('ACCOUNT INACTIVE: auto-logging out deactivated collector');
-          await logout();
+          await logout(reason: 'Your account has been deactivated. Please contact your administrator.');
           return false;
         }
         _user = user;
         notifyListeners();
         return true;
       } else if (response.statusCode == 401 || response.statusCode == 403 || response.statusCode == 404) {
-        debugPrint('ACCOUNT UNAUTHORIZED/DEACTIVATED [${response.statusCode}]: logging out');
-        await logout();
+        debugPrint('ACCOUNT UNAUTHORIZED / PASSWORD CHANGED [${response.statusCode}]: auto-logging out');
+        await logout(reason: 'Password or account permissions updated by admin. Please sign in again.');
         return false;
       }
     } catch (e) {
@@ -116,6 +144,7 @@ class AuthProvider extends ChangeNotifier {
         if (token != null) {
           await StorageService.saveToken(token);
         }
+        _startHeartbeat();
         _isLoading = false;
         notifyListeners();
         return true;
@@ -257,9 +286,23 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> logout() async {
+  Future<void> logout({String? reason}) async {
+    _stopHeartbeat();
     _user = null;
+    if (reason != null && reason.isNotEmpty) {
+      _errorMessage = reason;
+    }
     await StorageService.clearAll();
     notifyListeners();
+    navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginView()),
+      (route) => false,
+    );
+  }
+
+  @override
+  void dispose() {
+    _stopHeartbeat();
+    super.dispose();
   }
 }

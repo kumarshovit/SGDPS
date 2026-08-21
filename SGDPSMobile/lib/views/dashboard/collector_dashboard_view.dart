@@ -72,7 +72,11 @@ class _CollectorDashboardViewState extends State<CollectorDashboardView> with Wi
   Future<void> _loadData({bool silent = false}) async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final isActive = await auth.verifyAccountStatus();
-    if (!isActive || !mounted) return;
+    if (!isActive) {
+      _stopAutoRefresh();
+      return;
+    }
+    if (!mounted) return;
 
     await Future.wait([
       Provider.of<CollectionProvider>(context, listen: false)
