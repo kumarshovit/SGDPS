@@ -37,7 +37,8 @@ public class GetMeHandler(IReadRepository<User> _repository, ILogger<GetMeHandle
       user.Email,
       user.IsActive,
       user.CreatedOn,
-      roles);
+      roles,
+      user.PasswordHash);
 
     return Result.Success(userDto);
     }

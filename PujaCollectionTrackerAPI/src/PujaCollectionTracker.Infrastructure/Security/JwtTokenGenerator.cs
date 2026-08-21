@@ -22,13 +22,18 @@ public class JwtTokenGenerator(IOptions<JwtConfiguration> jwtOptions, ILogger<Jw
     var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
     var expiresAt = DateTime.UtcNow.AddMinutes(_config.ExpirationMinutes);
 
+    var pwdStamp = !string.IsNullOrEmpty(user.PasswordHash)
+      ? user.PasswordHash.Substring(0, Math.Min(16, user.PasswordHash.Length))
+      : string.Empty;
+
     var claims = new List<Claim>
     {
       new Claim(JwtRegisteredClaimNames.Sub, user.Id.Value.ToString()),
       new Claim(JwtRegisteredClaimNames.Email, user.Email),
       new Claim(JwtRegisteredClaimNames.GivenName, user.FirstName),
       new Claim(JwtRegisteredClaimNames.FamilyName, user.LastName),
-      new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+      new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+      new Claim("pwd_stamp", pwdStamp)
     };
 
     foreach (var userRole in user.UserRoles)

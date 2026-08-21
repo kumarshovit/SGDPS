@@ -13,4 +13,5 @@ public record UserDto(
   string Email,
   bool IsActive,
   DateTime CreatedOn,
-  IReadOnlyCollection<string> Roles = null!);
+  IReadOnlyCollection<string> Roles = null!,
+  string PasswordHash = "");

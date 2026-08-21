@@ -151,17 +151,17 @@ public class CreateCollectorEndpoint(AppDbContext db, IPasswordHasher hasher) : 
   }
 }
 
-public record UpdateUserNameRequest(string FirstName, string? LastName);
+public record UpdateUserNameRequest(string FirstName, string? LastName, string? Password = null);
 
 // PUT /api/users/{id}/name
-public class UpdateUserNameEndpoint(AppDbContext db) : Endpoint<UpdateUserNameRequest, Results<Ok<CollectorDto>, ProblemHttpResult>>
+public class UpdateUserNameEndpoint(AppDbContext db, IPasswordHasher hasher) : Endpoint<UpdateUserNameRequest, Results<Ok<CollectorDto>, ProblemHttpResult>>
 {
   public override void Configure()
   {
     Put("/users/{id:int}/name");
     AllowAnonymous();
     Tags("Users");
-    Summary(s => s.Summary = "Update user first and last name");
+    Summary(s => s.Summary = "Update user first and last name, and optionally password");
   }
 
   public override async Task<Results<Ok<CollectorDto>, ProblemHttpResult>> ExecuteAsync(UpdateUserNameRequest req, CancellationToken ct)
@@ -176,6 +176,17 @@ public class UpdateUserNameEndpoint(AppDbContext db) : Endpoint<UpdateUserNameRe
       return TypedResults.Problem(detail: "User not found", statusCode: 404);
 
     user.UpdateName(req.FirstName.Trim(), req.LastName?.Trim());
+
+    if (!string.IsNullOrWhiteSpace(req.Password))
+    {
+      if (req.Password.Trim().Length < 8)
+        return TypedResults.Problem(detail: "Password must be at least 8 characters long", statusCode: 400);
+
+      var newHash = hasher.Hash(req.Password.Trim());
+      user.ChangePassword(newHash);
+      user.RevokeRefreshToken();
+    }
+
     await db.SaveChangesAsync(ct);
 
     var collections = await db.PaymentCollections.Where(c => c.CollectedByUserId == id.ToString()).ToListAsync(ct);

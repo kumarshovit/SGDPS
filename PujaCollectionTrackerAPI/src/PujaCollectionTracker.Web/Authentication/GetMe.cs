@@ -80,6 +80,16 @@ public class GetMe(IMediator mediator, ILogger<GetMe> _logger)
       return TypedResults.Unauthorized();
     }
 
+    var pwdStampClaim = User.FindFirst("pwd_stamp")?.Value;
+    if (!string.IsNullOrEmpty(user.PasswordHash))
+    {
+      var currentStamp = user.PasswordHash.Substring(0, Math.Min(16, user.PasswordHash.Length));
+      if (string.IsNullOrEmpty(pwdStampClaim) || pwdStampClaim != currentStamp)
+      {
+        return TypedResults.Unauthorized();
+      }
+    }
+
     return TypedResults.Ok(new UserMeResponse(
       user.Id.Value,
       user.FirstName,
