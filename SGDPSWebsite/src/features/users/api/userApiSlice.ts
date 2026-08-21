@@ -15,7 +15,7 @@ export const userApiSlice = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Users'],
     }),
-    updateUserName: builder.mutation<Collector, { id: number; firstName: string; lastName?: string }>({
+    updateUserName: builder.mutation<Collector, { id: number; firstName: string; lastName?: string; password?: string }>({
       query: ({ id, ...body }) => ({
         url: `/users/${id}/name`,
         method: 'PUT',

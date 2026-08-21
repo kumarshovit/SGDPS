@@ -52,6 +52,7 @@ export const UserManagementPage: React.FC = () => {
   const [editingCollector, setEditingCollector] = useState<Collector | null>(null);
   const [editFirstName, setEditFirstName] = useState('');
   const [editLastName, setEditLastName] = useState('');
+  const [editPassword, setEditPassword] = useState('');
   const [editErrMsg, setEditErrMsg] = useState('');
 
   // Status Confirmation Modal State
@@ -133,6 +134,7 @@ export const UserManagementPage: React.FC = () => {
     setEditingCollector(c);
     setEditFirstName(c.firstName || '');
     setEditLastName(c.lastName || '');
+    setEditPassword('');
     setEditErrMsg('');
     setIsEditModalOpen(true);
   };
@@ -147,12 +149,14 @@ export const UserManagementPage: React.FC = () => {
         id: editingCollector.id,
         firstName: editFirstName.trim(),
         lastName: editLastName.trim(),
+        password: editPassword.trim() ? editPassword.trim() : undefined,
       }).unwrap();
 
       setIsEditModalOpen(false);
       setEditingCollector(null);
+      setEditPassword('');
     } catch (err: any) {
-      setEditErrMsg(err?.data?.detail || 'Failed to update collector name');
+      setEditErrMsg(err?.data?.detail || 'Failed to update collector');
     }
   };
 
@@ -409,17 +413,18 @@ export const UserManagementPage: React.FC = () => {
         />
       </GlassCard>
 
-      {/* Edit Collector Name Modal */}
+      {/* Edit Collector Profile & Password Modal */}
       {isEditModalOpen && editingCollector && (
         <Modal
           isOpen={isEditModalOpen}
           onClose={() => {
             setIsEditModalOpen(false);
             setEditingCollector(null);
+            setEditPassword('');
             setEditErrMsg('');
           }}
-          title="Edit Collector Name"
-          subtitle={`Update name for login ID: ${editingCollector.email}`}
+          title="Edit Collector Profile"
+          subtitle={`Update name & password for login ID: ${editingCollector.email}`}
           maxWidth="sm"
         >
           <form onSubmit={handleUpdateCollectorName} className="space-y-4">
@@ -441,8 +446,17 @@ export const UserManagementPage: React.FC = () => {
               />
             </div>
 
+            <Input
+              label="New Password (Optional)"
+              type="password"
+              value={editPassword}
+              onChange={(e) => setEditPassword(e.target.value)}
+              placeholder="Leave blank to keep existing password"
+              icon={<Lock size={15} />}
+            />
+
             <div className="p-2.5 rounded-xl bg-gold-500/10 border border-gold-500/20 text-[11px] text-gold-800 dark:text-gold-300">
-              💡 Updating the collector's name will update their profile across mobile receipts and collection attributions.
+              💡 Updating the password will immediately apply to the collector's mobile app login credentials.
             </div>
 
             {editErrMsg && (
@@ -458,6 +472,7 @@ export const UserManagementPage: React.FC = () => {
                 onClick={() => {
                   setIsEditModalOpen(false);
                   setEditingCollector(null);
+                  setEditPassword('');
                   setEditErrMsg('');
                 }}
               >
